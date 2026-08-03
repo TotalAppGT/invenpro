@@ -80,7 +80,7 @@ export async function POST(
         fechaFin: updated.fechaFin,
         totalItems: updated.items.length,
         itemsConDiferencia: diferencias.length,
-        diferencias: diferencias.map((i: { productoId: string; producto: { id: string; codigo: string; nombre: string; costoUnit: { valueOf(): number } | number } | null; cantidadSistema: number; cantidadFisica: number; diferencia: number }) => ({
+        diferencias: diferencias.map((i) => ({
           productoId: i.productoId,
           producto: i.producto,
           cantidadSistema: i.cantidadSistema,
