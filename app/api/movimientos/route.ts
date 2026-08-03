@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: movimientos.map((m: { id: string; tipo: string; fecha: Date; cantidad: number; cantAnterior: number; cantNueva: number; costoUnit: { valueOf(): number } | number | null; total: { valueOf(): number } | number | null; producto: { id: string; codigo: string; nombre: string }; bodega: { id: string; nombre: string }; bodegaDestino: { id: string; nombre: string } | null; usuario: { id: string; nombre: string; email: string }; notas: string | null; referencia: string | null; documento: string | null; createdAt: Date }) => ({
+      data: movimientos.map((m: any) => ({
         id: m.id,
         tipo: m.tipo,
         fecha: m.fecha,

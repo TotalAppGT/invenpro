@@ -16,8 +16,8 @@ type InvItem = {
     nombre: string;
     descripcion: string | null;
     unidadMedida: string;
-    costoUnit: { valueOf(): number } | number;
-    precioUnit: { valueOf(): number } | number;
+    costoUnit: any;
+    precioUnit: any;
     stockMin: number;
     stockMax: number;
     codigoBarras: string | null;

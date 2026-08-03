@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
           orderBy: { producto: { nombre: "asc" } },
         });
 
-        const data = inventario.map((inv: { producto: { codigo: string; nombre: string; descripcion: string | null; categoria: { nombre: string }; proveedor: { nombre: string } | null; unidadMedida: string; costoUnit: { valueOf(): number } | number; precioUnit: { valueOf(): number } | number; stockMin: number; stockMax: number; sku: string | null }; bodega: { nombre: string }; cantidad: number; lote: string; fechaVencimiento: Date | null; ultimaActualizacion: Date }) => ({
+        const data = inventario.map((inv: any) => ({
           codigo: inv.producto.codigo,
           producto: inv.producto.nombre,
           descripcion: inv.producto.descripcion,
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
           orderBy: { fecha: "desc" },
         });
 
-        const data = movimientos.map((m: { fecha: Date; tipo: string; cantidad: number; cantAnterior: number; cantNueva: number; costoUnit: { valueOf(): number } | number | null; total: { valueOf(): number } | number | null; producto: { nombre: string; codigo: string }; bodega: { nombre: string }; bodegaDestino: { nombre: string } | null; usuario: { nombre: string }; notas: string | null; documento: string | null; referencia: string | null }) => ({
+        const data = movimientos.map((m: any) => ({
           fecha: m.fecha,
           tipo: m.tipo,
           producto: m.producto.nombre,
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
           orderBy: { nombre: "asc" },
         });
 
-        const data = productos.map((p: { codigo: string; nombre: string; descripcion: string | null; categoria: { nombre: string }; proveedor: { nombre: string } | null; unidadMedida: string; costoUnit: { valueOf(): number } | number; precioUnit: { valueOf(): number } | number; stockMin: number; stockMax: number; sku: string | null; codigoBarras: string | null; inventarios: Array<{ cantidad: number; bodega: { nombre: string } }> }) => ({
+        const data = productos.map((p: any) => ({
           codigo: p.codigo,
           nombre: p.nombre,
           descripcion: p.descripcion,
@@ -197,7 +197,7 @@ export async function GET(request: NextRequest) {
             inv.cantidad <= inv.producto.stockMin
         );
 
-        const data = bajo.map((inv: { producto: { codigo: string; nombre: string; sku: string | null; stockMin: number; stockMax: number; costoUnit: { valueOf(): number } | number; precioUnit: { valueOf(): number } | number; proveedor: { nombre: string } | null }; bodega: { nombre: string }; cantidad: number; ultimaActualizacion: Date }) => ({
+        const data = bajo.map((inv: any) => ({
           codigo: inv.producto.codigo,
           producto: inv.producto.nombre,
           sku: inv.producto.sku,
@@ -250,7 +250,7 @@ export async function GET(request: NextRequest) {
         });
 
         let saldo = 0;
-        const data = movimientos.map((m: { tipo: string; cantidad: number; cantNueva: number; costoUnit: { valueOf(): number } | number | null; fecha: Date; notas: string | null; documento: string | null; bodega: { nombre: string } }) => {
+        const data = movimientos.map((m: any) => {
           if (m.tipo === "ENTRADA" || m.tipo === "AJUSTE" || m.tipo === "CONTEO_DIFERENCIA") {
             if (m.tipo === "CONTEO_DIFERENCIA") {
               saldo = m.cantNueva;

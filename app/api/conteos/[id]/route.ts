@@ -104,7 +104,7 @@ export async function PUT(
         usuario: finalConteo!.usuario,
         notas: finalConteo!.notas,
         fechaInicio: finalConteo!.fechaInicio,
-        items: finalConteo!.items.map((i: { id: string; producto: { id: string; codigo: string; nombre: string; costoUnit: { valueOf(): number } | number } | null; cantidadSistema: number; cantidadFisica: number; diferencia: number; notas: string | null }) => ({
+        items: finalConteo!.items.map((i: any) => ({
           id: i.id,
           producto: i.producto,
           cantidadSistema: i.cantidadSistema,

@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: productos.map((p: { id: string; codigo: string; nombre: string; descripcion: string | null; categoria: { id: string; nombre: string }; proveedor: { id: string; nombre: string } | null; unidadMedida: string; costoUnit: { valueOf(): number } | number; precioUnit: { valueOf(): number } | number; stockMin: number; stockMax: number; codigoBarras: string | null; sku: string | null; imagen: string | null; estado: string; inventarios: Array<{ cantidad: number; bodega: { nombre: string } }>; createdAt: Date; updatedAt: Date }) => ({
+      data: productos.map((p: any) => ({
         id: p.id,
         codigo: p.codigo,
         nombre: p.nombre,

@@ -9,8 +9,8 @@ type InvWithProduct = {
     id: string;
     nombre: string;
     codigo: string;
-    costoUnit: { valueOf(): number } | number;
-    precioUnit: { valueOf(): number } | number;
+    costoUnit: any;
+    precioUnit: any;
     stockMin: number;
     stockMax: number;
     codigoBarras: string | null;
