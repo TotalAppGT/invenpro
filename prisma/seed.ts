@@ -66,8 +66,8 @@ async function main() {
         "Soporte por email",
         "Exportar CSV",
       ],
-      priceMonthly: 149.00,
-      priceYearly: 1430.00,
+      priceMonthly: 199.00,
+      priceYearly: 1990.00,
     },
   });
 
@@ -95,8 +95,8 @@ async function main() {
         "Soporte prioritario",
         "API de acceso",
       ],
-      priceMonthly: 449.00,
-      priceYearly: 4310.00,
+      priceMonthly: 349.00,
+      priceYearly: 3490.00,
     },
   });
 
@@ -128,8 +128,8 @@ async function main() {
         "Personalizacion de marca",
         "Capacitacion incluida",
       ],
-      priceMonthly: 999.00,
-      priceYearly: 9590.00,
+      priceMonthly: 799.00,
+      priceYearly: 7990.00,
     },
   });
   console.log("  Planes: EMPRENDEDOR, NEGOCIO, CORPORATIVO");
@@ -493,7 +493,7 @@ async function main() {
   console.log("  SEED COMPLETADO EXITOSAMENTE");
   console.log("==============================================");
   console.log("  Tenants: 2 (admin-central + demo)");
-  console.log("  Planes: 3 (EMPRENDEDOR Q149/Q1430, NEGOCIO Q449/Q4310, CORPORATIVO Q999/Q9590)");
+  console.log("  Planes: 3 (EMPRENDEDOR Q199.00/Q1990.00, NEGOCIO Q449/Q3490.00, CORPORATIVO Q999/Q7990.00)");
   console.log("  Usuarios: 2 (Super Admin + Demo)");
   console.log("  Bodegas: 2 (Principal + Transito)");
   console.log("  Categorias: 3 (Tecnologia, Oficina, Mobiliario)");
