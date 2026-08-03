@@ -28,7 +28,7 @@ export function useApi<T = unknown>(
   url: string,
   options: UseApiOptions = {}
 ): UseApiReturn<T> {
-  const { token, tenant } = useAuth();
+  const { tenant } = useAuth();
   const [state, setState] = useState<UseApiState<T>>({
     data: null,
     loading: options.immediate ?? false,
@@ -55,10 +55,6 @@ export function useApi<T = unknown>(
           "Content-Type": "application/json",
           ...merged.headers,
         };
-
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
 
         if (tenant?.id) {
           headers["x-tenant-id"] = tenant.id;
@@ -103,7 +99,7 @@ export function useApi<T = unknown>(
         return null;
       }
     },
-    [url, token, tenant]
+    [url, tenant]
   );
 
   const executefn = useCallback(
