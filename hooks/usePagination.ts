@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 export interface UsePaginationResult {
   currentPage: number;
   totalPages: number;
-  paginatedItems: <T>(items: T[]) => T[];
+  paginatedItems: (items: unknown[]) => unknown[];
   nextPage: () => void;
   prevPage: () => void;
   goToPage: (page: number) => void;
@@ -32,7 +32,7 @@ export function usePagination<T>(items: T[], defaultItemsPerPage: number = 10): 
   }, [totalPages, currentPage]);
 
   const paginatedItems = useCallback(
-    <U extends T>(sourceItems: U[]): U[] => {
+    (sourceItems: T[]): T[] => {
       const start = (currentPage - 1) * itemsPerPage;
       const end = start + itemsPerPage;
       return sourceItems.slice(start, end);
