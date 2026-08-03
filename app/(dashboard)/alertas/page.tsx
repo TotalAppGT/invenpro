@@ -45,7 +45,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { formatDate, formatRelativeDate, cn } from "@/lib/utils";
+import { formatDate, formatRelativeTime, cn } from "@/lib/utils";
 
 const alertaSchema = z.object({
   tipo: z.enum(["STOCK_BAJO", "VENCIMIENTO", "MOVIMIENTO", "PERSONALIZADA"]),
@@ -416,7 +416,7 @@ export default function AlertasPage() {
                     <div className="flex items-center justify-between text-xs text-white/40">
                       <span>Creada: {formatDate(alerta.createdAt)}</span>
                       {alerta.ultimoEnvio && (
-                        <span>Último envío: {formatRelativeDate(alerta.ultimoEnvio)}</span>
+                        <span>Último envío: {formatRelativeTime(alerta.ultimoEnvio)}</span>
                       )}
                     </div>
                   </CardContent>
