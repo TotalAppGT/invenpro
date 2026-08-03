@@ -69,7 +69,7 @@ export function usePagination<T>(items: T[], defaultItemsPerPage: number = 10): 
   return {
     currentPage,
     totalPages,
-    paginatedItems,
+    paginatedItems: paginatedItems as (items: unknown[]) => unknown[],
     nextPage,
     prevPage,
     goToPage,
