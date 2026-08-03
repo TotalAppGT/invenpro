@@ -52,7 +52,7 @@ export async function GET() {
         slug: tenant.slug,
         plan: tenant.plan,
         status: tenant.status,
-        config: tenant.config,
+        config: tenant.config || {},
         recurrenteCustomerId: tenant.recurrenteCustomerId,
         recurrenteSubscriptionId: tenant.recurrenteSubscriptionId,
         trialEndsAt: tenant.trialEndsAt,
@@ -103,13 +103,21 @@ export async function PUT(request: NextRequest) {
     }
 
     if (config !== undefined) {
-      if (typeof config !== "object" || config === null) {
+      if (typeof config !== "object" || config === null || Array.isArray(config)) {
         return NextResponse.json(
           { success: false, error: "La configuración debe ser un objeto JSON válido" },
           { status: 400 }
         );
       }
-      updateData.config = config;
+
+      const currentTenant = await prisma.tenant.findUnique({
+        where: { id: session.tenantId },
+        select: { config: true },
+      });
+
+      const currentConfig = (currentTenant?.config as Record<string, unknown>) || {};
+      const mergedConfig = deepMerge(currentConfig, config as Record<string, unknown>);
+      updateData.config = mergedConfig;
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -144,4 +152,29 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    const sourceVal = source[key];
+    const targetVal = target[key];
+    if (sourceVal === undefined) continue;
+    if (
+      sourceVal !== null &&
+      typeof sourceVal === "object" &&
+      !Array.isArray(sourceVal) &&
+      targetVal !== null &&
+      typeof targetVal === "object" &&
+      !Array.isArray(targetVal)
+    ) {
+      result[key] = deepMerge(
+        targetVal as Record<string, unknown>,
+        sourceVal as Record<string, unknown>
+      );
+    } else {
+      result[key] = sourceVal;
+    }
+  }
+  return result;
 }

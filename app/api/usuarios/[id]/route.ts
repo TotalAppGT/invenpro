@@ -71,6 +71,7 @@ export async function PUT(
         telefono: true,
         foto: true,
         ultimoAcceso: true,
+        createdAt: true,
         updatedAt: true,
       },
     });
@@ -129,11 +130,14 @@ export async function DELETE(
       );
     }
 
-    await prisma.user.delete({ where: { id } });
+    await prisma.user.update({
+      where: { id },
+      data: { estado: "INACTIVO" },
+    });
 
     return NextResponse.json({
       success: true,
-      message: "Usuario eliminado exitosamente",
+      message: "Usuario desactivado exitosamente",
     });
   } catch (error) {
     console.error("Usuarios DELETE error:", error);

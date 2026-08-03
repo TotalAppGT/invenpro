@@ -17,36 +17,75 @@ const syne = Syne({
 
 export const metadata: Metadata = {
   title: {
-    default: "InvenPro - Sistema de Gestión de Inventario",
+    default: "InvenPro | Sistema de Gestion de Inventario Profesional",
     template: "%s | InvenPro",
   },
   description:
-    "InvenPro es el sistema de gestión de inventario multi-tenant líder en Guatemala. Controla múltiples bodegas, productos, kardex automatizado, conteos físicos, reportes avanzados y más. Diseñado para empresas guatemaltecas que buscan profesionalizar su control de inventario.",
+    "Sistema de gestion de inventario multi-tenant disenado para empresas guatemaltecas. Controla multiples bodegas, productos, kardex automatizado, conteos fisicos, reportes avanzados y mas. 100% en la nube, sin instalacion.",
   keywords: [
     "inventario",
-    "gestión de inventario",
+    "gestion de inventario",
     "kardex",
     "bodegas",
     "Guatemala",
     "control de stock",
     "multi-tenant",
     "sistema de inventario",
-    "conteos físicos",
-    "códigos de barras",
+    "conteos fisicos",
+    "codigos de barras",
+    "InvenPro",
+    "TotalAppGT",
   ],
-  authors: [{ name: "InvenPro Guatemala" }],
-  creator: "InvenPro",
-  metadataBase: new URL("https://invenpro.app"),
+  authors: [{ name: "TotalAppGT", url: "https://invenpro.app" }],
+  creator: "TotalAppGT",
+  publisher: "TotalAppGT",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://invenpro.app"),
   openGraph: {
     type: "website",
     locale: "es_GT",
     siteName: "InvenPro",
-    title: "InvenPro - Sistema de Gestión de Inventario",
+    title: "InvenPro | Sistema de Gestion de Inventario Profesional",
     description:
-      "Controla tu inventario como nunca antes. Multi-tenant, multi-bodega, tiempo real. El sistema líder en Guatemala.",
+      "Sistema de gestion de inventario multi-tenant disenado para empresas guatemaltecas. Control total de tu inventario con kardex, conteos fisicos, reportes y mas.",
+    url: "https://invenpro.app",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "InvenPro - Sistema de Gestion de Inventario",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "InvenPro | Sistema de Gestion de Inventario Profesional",
+    description:
+      "Sistema de gestion de inventario multi-tenant disenado para empresas guatemaltecas.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      {
+        url: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f46e5'/><path d='M30 35h40v10H30zm0 15h40v8H30zm-6-20h52v40H24z' fill='white' opacity='0.9'/><path d='M24 30h52l-8 40H32z' fill='white'/></svg>",
+        type: "image/svg+xml",
+      },
+    ],
+    shortcut: [
+      {
+        url: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f46e5'/><path d='M30 35h40v10H30zm0 15h40v8H30zm-6-20h52v40H24z' fill='white' opacity='0.9'/><path d='M24 30h52l-8 40H32z' fill='white'/></svg>",
+      },
+    ],
   },
 };
 
@@ -64,6 +103,8 @@ export default function RootLayout({
       <head>
         <meta name="theme-color" content="#0a0a1a" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <meta name="application-name" content="InvenPro" />
+        <meta name="apple-mobile-web-app-title" content="InvenPro" />
       </head>
       <body className="min-h-screen bg-[#0a0a1a] font-sans antialiased">
         <Providers>{children}</Providers>

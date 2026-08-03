@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/components/providers";
 import { toast } from "sonner";
-import { formatDate, formatDateTime, cn } from "@/lib/utils";
+import { formatDateTime, cn } from "@/lib/utils";
 import {
-  Search, Plus, Pencil, Trash2, UserPlus, Mail, Shield, Clock,
-  Users, AlertTriangle, Filter, ChevronLeft, ChevronRight,
+  Search, Plus, Pencil, Trash2, UserPlus, Mail, Shield,
+  Users, AlertTriangle, ChevronLeft, ChevronRight,
+  Copy, Check, Eye, EyeOff, X,
 } from "lucide-react";
 
 interface UsuarioItem {
@@ -43,6 +45,13 @@ const rolBadge: Record<string, { label: string; color: string }> = {
   CONSULTOR: { label: "Consultor", color: "bg-gray-500/10 text-gray-400 border-gray-500/20" },
 };
 
+const estadoBadge: Record<string, { label: string; variant: "success" | "default" }> = {
+  ACTIVO: { label: "Activo", variant: "success" },
+  INACTIVO: { label: "Inactivo", variant: "default" },
+};
+
+type DialogMode = "add" | "invite";
+
 export default function UsuariosPage() {
   const { user: currentUser, isAdmin, isSupervisor } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -54,20 +63,32 @@ export default function UsuariosPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const perPage = 10;
+  const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<DialogMode>("add");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UsuarioItem | null>(null);
   const [userToDelete, setUserToDelete] = useState<UsuarioItem | null>(null);
   const [saving, setSaving] = useState(false);
-  const [inviting, setInviting] = useState(false);
+  const [tempPassword, setTempPassword] = useState("");
+  const [passwordCopied, setPasswordCopied] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [sendInvite, setSendInvite] = useState(false);
 
   const [form, setForm] = useState({
     nombre: "",
     email: "",
     rol: "OPERADOR" as string,
     estado: "ACTIVO" as string,
+    telefono: "",
   });
+
+  const resetForm = () => {
+    setForm({ nombre: "", email: "", rol: "OPERADOR", estado: "ACTIVO", telefono: "" });
+    setSendInvite(false);
+  };
 
   const fetchUsuarios = useCallback(async () => {
     setLoading(true);
@@ -101,21 +122,59 @@ export default function UsuariosPage() {
     }
   }, [fetchUsuarios, isAdmin, isSupervisor, page]);
 
-  const handleSearch = useCallback((value: string) => {
-    setSearch(value);
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      setPage(1);
+      fetchUsuarios();
+    }, 400);
+    return () => {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    };
+  }, [search]);
+
+  useEffect(() => {
     setPage(1);
-  }, []);
+    fetchUsuarios();
+  }, [filterRol, filterEstado]);
+
+  const openAdd = () => {
+    setEditingUser(null);
+    setDialogMode("add");
+    resetForm();
+    setDialogOpen(true);
+  };
 
   const openInvite = () => {
     setEditingUser(null);
-    setForm({ nombre: "", email: "", rol: "OPERADOR", estado: "ACTIVO" });
+    setDialogMode("invite");
+    resetForm();
+    setSendInvite(true);
     setDialogOpen(true);
   };
 
   const openEdit = (u: UsuarioItem) => {
     setEditingUser(u);
-    setForm({ nombre: u.nombre, email: u.email, rol: u.rol, estado: u.estado });
+    setDialogMode("add");
+    setForm({
+      nombre: u.nombre,
+      email: u.email,
+      rol: u.rol,
+      estado: u.estado,
+      telefono: u.telefono || "",
+    });
     setDialogOpen(true);
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setPasswordCopied(true);
+      toast.success("Contrasena copiada al portapapeles");
+      setTimeout(() => setPasswordCopied(false), 3000);
+    } catch {
+      toast.error("No se pudo copiar al portapapeles");
+    }
   };
 
   const handleSave = async () => {
@@ -134,6 +193,7 @@ export default function UsuariosPage() {
             nombre: form.nombre,
             rol: form.rol,
             estado: form.estado,
+            telefono: form.telefono || null,
           }),
         });
         const data = await res.json();
@@ -149,8 +209,11 @@ export default function UsuariosPage() {
       } finally {
         setSaving(false);
       }
-    } else {
-      setInviting(true);
+      return;
+    }
+
+    if (dialogMode === "invite") {
+      setSaving(true);
       try {
         const res = await fetch("/api/usuarios/invite", {
           method: "POST",
@@ -163,6 +226,10 @@ export default function UsuariosPage() {
         });
         const data = await res.json();
         if (data.success) {
+          if (data.data?.tempPassword) {
+            setTempPassword(data.data.tempPassword);
+            setPasswordDialogOpen(true);
+          }
           toast.success(`Invitacion enviada a ${form.email}`);
           setDialogOpen(false);
           fetchUsuarios();
@@ -172,13 +239,44 @@ export default function UsuariosPage() {
       } catch {
         toast.error("Error al invitar usuario");
       } finally {
-        setInviting(false);
+        setSaving(false);
       }
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre: form.nombre,
+          email: form.email,
+          rol: form.rol,
+          telefono: form.telefono || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.tempPassword) {
+          setTempPassword(data.tempPassword);
+          setPasswordDialogOpen(true);
+        }
+        toast.success(`Usuario ${form.nombre} creado`);
+        setDialogOpen(false);
+        fetchUsuarios();
+      } else {
+        toast.error(data.error || "Error al crear usuario");
+      }
+    } catch {
+      toast.error("Error al crear usuario");
+    } finally {
+      setSaving(false);
     }
   };
 
   const confirmDelete = (u: UsuarioItem) => {
-    if (currentUser?.email === u.email) {
+    if (currentUser?.id === u.id || currentUser?.uid === u.id) {
       toast.error("No puedes eliminar tu propio usuario");
       return;
     }
@@ -195,7 +293,7 @@ export default function UsuariosPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Usuario ${userToDelete.nombre} eliminado`);
+        toast.success(`Usuario ${userToDelete.nombre} desactivado`);
         setDeleteDialogOpen(false);
         setUserToDelete(null);
         fetchUsuarios();
@@ -222,7 +320,18 @@ export default function UsuariosPage() {
   if (loading && usuarios.length === 0) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-10 w-48" />
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-10 w-48" />
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-40" />
+            <Skeleton className="h-9 w-40" />
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-10 w-36" />
+          <Skeleton className="h-10 w-36" />
+        </div>
         <Skeleton className="h-96 rounded-xl" />
       </div>
     );
@@ -241,10 +350,16 @@ export default function UsuariosPage() {
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={openInvite} className="bg-indigo-500 hover:bg-indigo-600">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Invitar Usuario
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={openAdd} className="bg-indigo-500 hover:bg-indigo-600">
+              <Plus className="mr-2 h-4 w-4" />
+              Agregar Usuario
+            </Button>
+            <Button onClick={openInvite} variant="outline" className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10">
+              <Mail className="mr-2 h-4 w-4" />
+              Invitar por Email
+            </Button>
+          </div>
         )}
       </div>
 
@@ -254,11 +369,11 @@ export default function UsuariosPage() {
           <Input
             placeholder="Buscar por nombre o email..."
             value={search}
-            onChange={(e) => handleSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
-        <Select value={filterRol} onValueChange={(v) => { setFilterRol(v); setPage(1); }}>
+        <Select value={filterRol} onValueChange={(v) => setFilterRol(v)}>
           <SelectTrigger className="w-36">
             <SelectValue placeholder="Rol" />
           </SelectTrigger>
@@ -270,7 +385,7 @@ export default function UsuariosPage() {
             <SelectItem value="CONSULTOR">Consultor</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={filterEstado} onValueChange={(v) => { setFilterEstado(v); setPage(1); }}>
+        <Select value={filterEstado} onValueChange={(v) => setFilterEstado(v)}>
           <SelectTrigger className="w-36">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
@@ -302,16 +417,21 @@ export default function UsuariosPage() {
                     <td className="px-4 py-3 font-medium text-white">{u.nombre}</td>
                     <td className="px-4 py-3 text-white/60">{u.email}</td>
                     <td className="px-4 py-3">
-                      <Badge className={cn("text-[10px] border", rolBadge[u.rol]?.color || "bg-gray-500/10 text-gray-400")}>
+                      <Badge
+                        className={cn(
+                          "text-[10px] border",
+                          rolBadge[u.rol]?.color || "bg-gray-500/10 text-gray-400 border-gray-500/20"
+                        )}
+                      >
                         {rolBadge[u.rol]?.label || u.rol}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
                       <Badge
-                        variant={u.estado === "ACTIVO" ? "success" : "default"}
+                        variant={estadoBadge[u.estado]?.variant || "default"}
                         className="text-[10px]"
                       >
-                        {u.estado === "ACTIVO" ? "Activo" : "Inactivo"}
+                        {estadoBadge[u.estado]?.label || u.estado}
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-white/40">
@@ -327,12 +447,12 @@ export default function UsuariosPage() {
                           size="icon"
                           className={cn(
                             "h-8 w-8",
-                            currentUser?.email === u.email
+                            (currentUser?.id === u.id || currentUser?.uid === u.id)
                               ? "opacity-30 cursor-not-allowed"
                               : "text-red-400 hover:text-red-300 hover:bg-red-500/10"
                           )}
                           onClick={() => confirmDelete(u)}
-                          disabled={currentUser?.email === u.email}
+                          disabled={currentUser?.id === u.id || currentUser?.uid === u.id}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -345,6 +465,12 @@ export default function UsuariosPage() {
                     <td colSpan={6} className="py-16 text-center">
                       <Users className="mx-auto mb-3 h-10 w-10 text-white/10" />
                       <p className="text-white/40">No se encontraron usuarios</p>
+                      {isAdmin && (
+                        <Button onClick={openAdd} size="sm" className="mt-4 bg-indigo-500 hover:bg-indigo-600">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Agregar Usuario
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -391,17 +517,24 @@ export default function UsuariosPage() {
                   <Pencil className="h-5 w-5 text-indigo-400" />
                   Editar Usuario
                 </>
+              ) : dialogMode === "invite" ? (
+                <>
+                  <Mail className="h-5 w-5 text-indigo-400" />
+                  Invitar por Email
+                </>
               ) : (
                 <>
                   <UserPlus className="h-5 w-5 text-indigo-400" />
-                  Invitar Usuario
+                  Agregar Usuario
                 </>
               )}
             </DialogTitle>
             <DialogDescription>
               {editingUser
                 ? "Modificar datos del usuario"
-                : "Envia una invitacion por correo electronico con un enlace de acceso"}
+                : dialogMode === "invite"
+                ? "Envia una invitacion por correo con un enlace de acceso"
+                : "Crea un nuevo usuario con contrasena temporal automatica"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -437,26 +570,63 @@ export default function UsuariosPage() {
                 </SelectContent>
               </Select>
             </div>
-            {editingUser && (
+            {!editingUser && (
               <div className="space-y-2">
-                <Label className="text-white">Estado</Label>
-                <div className="flex items-center gap-3 rounded-lg bg-white/[0.02] p-3">
-                  <Switch
-                    checked={form.estado === "ACTIVO"}
-                    onCheckedChange={(c) => setForm({ ...form, estado: c ? "ACTIVO" : "INACTIVO" })}
+                <Label className="text-white">Telefono (opcional)</Label>
+                <Input
+                  value={form.telefono}
+                  onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+                  placeholder="+502 XXXX XXXX"
+                />
+              </div>
+            )}
+            {editingUser && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-white">Telefono</Label>
+                  <Input
+                    value={form.telefono}
+                    onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+                    placeholder="+502 XXXX XXXX"
                   />
-                  <span className="text-sm text-white/60">
-                    {form.estado === "ACTIVO" ? "Activo" : "Inactivo"}
-                  </span>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-white">Estado</Label>
+                  <div className="flex items-center gap-3 rounded-lg bg-white/[0.02] p-3">
+                    <Switch
+                      checked={form.estado === "ACTIVO"}
+                      onCheckedChange={(c) => setForm({ ...form, estado: c ? "ACTIVO" : "INACTIVO" })}
+                    />
+                    <span className="text-sm text-white/60">
+                      {form.estado === "ACTIVO" ? "Activo" : "Inactivo"}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
+            {!editingUser && dialogMode === "invite" && (
+              <div className="flex items-start gap-2 rounded-lg bg-indigo-500/5 border border-indigo-500/10 p-3">
+                <Checkbox
+                  id="send-invite"
+                  checked={sendInvite}
+                  onCheckedChange={(c) => setSendInvite(!!c)}
+                />
+                <div>
+                  <Label htmlFor="send-invite" className="text-sm text-white cursor-pointer">
+                    Enviar invitacion por correo electronico
+                  </Label>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    El usuario recibira un email con su contrasena temporal y el enlace de acceso
+                  </p>
                 </div>
               </div>
             )}
-            {!editingUser && (
-              <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/10 p-3">
+            {!editingUser && dialogMode === "add" && (
+              <div className="rounded-lg bg-blue-500/5 border border-blue-500/10 p-3">
                 <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-indigo-400" />
-                  <p className="text-xs text-indigo-400">
-                    Se enviara una invitacion por correo a {form.email || "..."} con su contraseña temporal
+                  <Shield className="h-4 w-4 text-blue-400" />
+                  <p className="text-xs text-blue-400">
+                    Se generara una contrasena temporal de 10 caracteres automaticamente
                   </p>
                 </div>
               </div>
@@ -466,11 +636,11 @@ export default function UsuariosPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving || inviting} className="bg-indigo-500 hover:bg-indigo-600">
-              {saving || inviting ? (
+            <Button onClick={handleSave} disabled={saving} className="bg-indigo-500 hover:bg-indigo-600">
+              {saving ? (
                 <span className="animate-spin mr-2 h-4 w-4 border-2 border-white/30 border-t-white rounded-full" />
               ) : null}
-              {editingUser ? "Guardar Cambios" : "Enviar Invitacion"}
+              {editingUser ? "Guardar Cambios" : dialogMode === "invite" ? "Enviar Invitacion" : "Crear Usuario"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -481,11 +651,12 @@ export default function UsuariosPage() {
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-red-400" />
-              Confirmar Eliminacion
+              Confirmar Desactivacion
             </DialogTitle>
             <DialogDescription>
-              Esta accion no se puede deshacer. Se eliminara al usuario{" "}
+              Se desactivara al usuario{" "}
               <strong className="text-white">{userToDelete?.nombre}</strong> ({userToDelete?.email}).
+              Podra reactivarse posteriormente.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -498,7 +669,61 @@ export default function UsuariosPage() {
               ) : (
                 <Trash2 className="mr-2 h-4 w-4" />
               )}
-              Eliminar Usuario
+              Desactivar Usuario
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Shield className="h-5 w-5 text-green-400" />
+              Usuario Creado Exitosamente
+            </DialogTitle>
+            <DialogDescription>
+              Copia la contrasena temporal. El usuario debera cambiarla en su primer inicio de sesion.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-4">
+              <Label className="text-sm text-white/60 mb-2 block">Contrasena Temporal</Label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 rounded-md bg-black/40 border border-white/[0.06] px-3 py-2.5 font-mono text-lg tracking-wider text-green-400">
+                  {passwordVisible ? tempPassword : "•".repeat(tempPassword.length)}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => setPasswordVisible(!passwordVisible)}
+                >
+                  {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <Button
+              onClick={() => copyToClipboard(tempPassword)}
+              className="w-full bg-green-600 hover:bg-green-700"
+              variant={passwordCopied ? "outline" : "default"}
+            >
+              {passwordCopied ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Copiado
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copiar Contrasena
+                </>
+              )}
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasswordDialogOpen(false)}>
+              Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>

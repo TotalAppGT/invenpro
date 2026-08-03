@@ -23,30 +23,31 @@ const API_PUBLIC_PREFIXES = [
   "/api/auth/register",
   "/api/auth/session",
   "/api/auth/logout",
+  "/api/auth/change-password",
   "/api/health",
   "/api/tenant/check-slug",
   "/api/whatsapp/webhook",
+  "/api/checkout",
 ];
 
 const PROTECTED_PREFIXES = [
-  "/dashboard",
-  "/movimientos",
-  "/productos",
-  "/bodegas",
-  "/proveedores",
-  "/usuarios",
-  "/reportes",
-  "/configuracion",
-  "/inventario",
-  "/kardex",
-  "/alertas",
-  "/suscripcion",
-  "/perfil",
-  "/conteos",
-  "/ordenes-compra",
-  "/etiquetas",
-  "/cierres",
-  "/api/checkout",
+  "dashboard",
+  "movimientos",
+  "productos",
+  "bodegas",
+  "proveedores",
+  "usuarios",
+  "reportes",
+  "configuracion",
+  "inventario",
+  "kardex",
+  "alertas",
+  "suscripcion",
+  "perfil",
+  "conteos",
+  "ordenes-compra",
+  "etiquetas",
+  "cierres",
 ];
 
 function isPublicRoute(pathname: string): boolean {
@@ -142,7 +143,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (hasSession && session && pathname === "/login") {
+  if (hasSession && session && (pathname === "/login" || pathname === "/register")) {
     if (session.email === "totalappgt@gmail.com" && session.rol === "ADMIN") {
       return NextResponse.redirect(new URL("/admin", request.url));
     }

@@ -54,10 +54,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const trustStats = [
-  { icon: Server, label: "99.9% Uptime", color: "text-green-400" },
-  { icon: MessageCircle, label: "Soporte WhatsApp", color: "text-emerald-400" },
   { icon: MapPin, label: "Hecho en Guatemala", color: "text-sky-400" },
-  { icon: Lock, label: "Encriptación Bancaria", color: "text-indigo-400" },
+  { icon: MessageCircle, label: "Soporte WhatsApp", color: "text-emerald-400" },
+  { icon: Server, label: "99.9% Uptime", color: "text-green-400" },
+  { icon: Clock, label: "14 Dias Gratis", color: "text-indigo-400" },
 ];
 
 const features = [
@@ -216,49 +216,49 @@ const advancedModules = [
 const plans = [
   {
     name: "Emprendedor",
-    priceMonthly: 149,
-    priceYearly: 119,
+    priceMonthly: 99,
+    priceYearly: 990,
     popular: false,
-    description: "Ideal para negocios que están empezando a profesionalizar su inventario.",
+    description: "Ideal para negocios que estan empezando a profesionalizar su inventario.",
     features: [
       "3 usuarios incluidos",
       "2 bodegas",
       "Hasta 500 productos",
-      "Kardex valorizado básico",
+      "Kardex valorizado basico",
       "Alertas de stock bajo",
       "Reportes PDF y Excel",
-      "Escáner de códigos de barras",
+      "Escáner de codigos de barras",
       "Soporte por email",
-      "14 días de prueba gratis",
+      "14 dias de prueba gratis",
     ],
   },
   {
     name: "Negocio",
-    priceMonthly: 449,
-    priceYearly: 359,
+    priceMonthly: 349,
+    priceYearly: 3490,
     popular: true,
-    description: "La opción más elegida por empresas guatemaltecas en crecimiento.",
+    description: "La opcion mas elegida por empresas guatemaltecas en crecimiento.",
     features: [
       "10 usuarios incluidos",
       "10 bodegas",
       "Productos ilimitados",
       "Kardex avanzado (PEPS/UEPS/Promedio)",
-      "Conteos físicos con app móvil",
+      "Conteos fisicos con app movil",
       "Alertas por WhatsApp Business",
       "Dashboards en tiempo real",
-      "Órdenes de compra y recepción",
-      "API REST básica",
+      "Ordenes de compra y recepcion",
+      "API REST basica",
       "Soporte prioritario",
-      "Importación masiva CSV/Excel",
+      "Importacion masiva CSV/Excel",
       "Etiquetas personalizables",
     ],
   },
   {
     name: "Corporativo",
-    priceMonthly: 999,
-    priceYearly: 799,
+    priceMonthly: 799,
+    priceYearly: 7990,
     popular: false,
-    description: "Para empresas que necesitan integración total y personalización avanzada.",
+    description: "Para empresas que necesitan integracion total y personalizacion avanzada.",
     features: [
       "Usuarios ilimitados",
       "Bodegas ilimitadas",
@@ -267,13 +267,13 @@ const plans = [
       "White Label opcional",
       "WhatsApp Business API",
       "SLA 24/7 garantizado",
-      "Capacitación personalizada",
+      "Capacitacion personalizada",
       "Integraciones a medida",
       "Gerente de cuenta dedicado",
-      "Migración de datos asistida",
-      "Auditoría avanzada",
+      "Migracion de datos asistida",
+      "Auditoria avanzada",
       "Cierres contables automatizados",
-      "Soporte telefónico + WhatsApp",
+      "Soporte telefonico + WhatsApp",
     ],
   },
 ];
@@ -953,8 +953,9 @@ export default function LandingPage() {
               <span className="text-gradient">cada etapa de tu empresa</span>
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              Elige el plan que mejor se adapte a tu negocio. Todos incluyen
-              prueba gratuita de 14 días sin compromiso y sin tarjeta de crédito.
+              Elige el plan que mejor se adapte a tu negocio. Todos incluyen{" "}
+              <span className="text-green-400 font-semibold">14 dias de prueba gratis</span>{" "}
+              sin compromiso y sin tarjeta de credito.
             </p>
           </motion.div>
 
@@ -980,12 +981,12 @@ export default function LandingPage() {
                 className="absolute top-1 h-5 w-5 rounded-full bg-white shadow-md"
               />
             </button>
-            <span className={cn("text-sm flex items-center gap-2", isAnnual ? "text-white font-medium" : "text-muted-foreground")}>
-              Facturación Anual
-              <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">
-                Ahorra 20%
+              <span className={cn("text-sm flex items-center gap-2", isAnnual ? "text-white font-medium" : "text-muted-foreground")}>
+                Facturacion Anual
+                <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">
+                  2 meses gratis
+                </span>
               </span>
-            </span>
           </motion.div>
 
           <div className="mt-12 grid gap-8 lg:grid-cols-3">
@@ -1022,17 +1023,17 @@ export default function LandingPage() {
                     <div className="mt-5 flex items-baseline justify-center gap-1">
                       <span className="text-sm text-muted-foreground">Q</span>
                       <span className="text-5xl font-bold text-white">
-                        {isAnnual ? plan.priceYearly : plan.priceMonthly}
+                        {plan.priceMonthly}
                       </span>
                       <span className="text-sm text-muted-foreground">/mes</span>
                     </div>
                     {isAnnual ? (
                       <p className="mt-2 text-xs text-green-400">
-                        Q{annualTotal.toLocaleString("es-GT")}/año · Ahorras Q{savings.toLocaleString("es-GT")}
+                        Q{plan.priceYearly.toLocaleString("es-GT")}/ano
                       </p>
                     ) : (
                       <p className="mt-2 text-xs text-muted-foreground">
-                        Q{monthlyTotal.toLocaleString("es-GT")}/año
+                        Q{(plan.priceMonthly * 12).toLocaleString("es-GT")}/ano
                       </p>
                     )}
                   </div>

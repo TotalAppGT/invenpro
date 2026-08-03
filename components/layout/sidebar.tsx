@@ -36,6 +36,21 @@ interface SidebarProps {
   onMobileClose?: () => void;
 }
 
+const LogoBrand = () => (
+  <Link href="/dashboard" className="flex items-center gap-3 group">
+    <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 shadow-lg shadow-indigo-500/25 transition-all duration-300 group-hover:shadow-indigo-500/40 group-hover:scale-105">
+      <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-indigo-400/0 to-violet-400/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+      <Boxes className="h-5 w-5 text-white relative z-10" strokeWidth={2} />
+    </div>
+    <div className="flex flex-col leading-tight">
+      <span className="text-sm font-bold tracking-tight text-white">
+        Inven<span className="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">Pro</span>
+      </span>
+      <span className="text-[10px] text-white/30 tracking-wide">by TotalAppGT</span>
+    </div>
+  </Link>
+);
+
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const { user, isAdmin, isSupervisor } = useAuth();
@@ -119,18 +134,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   const sidebarContent = (
     <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center gap-3 border-b border-white/5 px-4">
-        <Link href="/dashboard" className="flex items-center gap-3" onClick={onMobileClose}>
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/20">
-            <Boxes className="h-5 w-5 text-white" />
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-bold tracking-tight text-white">
-              Inven<span className="text-indigo-400">Pro</span>
-            </span>
-            <span className="text-[10px] text-white/40">Gestion de Inventario</span>
-          </div>
-        </Link>
+      <div className="flex h-16 items-center gap-3 border-b border-white/[0.04] px-4 bg-gradient-to-r from-transparent via-indigo-500/[0.02] to-transparent">
+        <LogoBrand />
         <button
           onClick={onMobileClose}
           className="ml-auto rounded-md p-1 text-white/40 hover:text-white lg:hidden"
@@ -213,9 +218,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       </div>
 
       {user ? (
-        <div className="border-t border-white/5 p-4">
+        <div className="border-t border-white/[0.04] bg-gradient-to-r from-transparent via-white/[0.01] to-transparent p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white ring-1 ring-indigo-400/20">
               {user.photo ? (
                 <img
                   src={user.photo}
@@ -242,7 +247,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           </div>
         </div>
       ) : (
-        <div className="border-t border-white/5 p-4">
+        <div className="border-t border-white/[0.04] p-4">
           <div className="flex items-center gap-3">
             <Skeleton className="h-9 w-9 rounded-full" />
             <div className="min-w-0 flex-1 space-y-1">

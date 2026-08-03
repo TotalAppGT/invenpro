@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ClipboardList, Plus, Search, Warehouse, CheckCircle, Loader2,
   ScanLine, ClipboardCheck, Download, RefreshCw, Pause, Play,
   BarChart3, Percent, Hash, Package, ChevronLeft, Camera, XCircle,
   AlertTriangle, FileText, Eye, RotateCcw, ArrowRight, Info,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -92,12 +93,25 @@ const estadoLabel: Record<ConteoEstado, string> = {
   CONCILIADO: "Conciliado",
 };
 
+function downloadBlob(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function ConteosPage() {
   const { user } = useAuth();
   const [conteos, setConteos] = useState<ConteoData[]>([]);
   const [bodegas, setBodegas] = useState<BodegaOption[]>([]);
   const [productos, setProductos] = useState<ProductoOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bodegasLoading, setBodegasLoading] = useState(false);
   const [filterEstado, setFilterEstado] = useState<string>("ALL");
   const [filterBodega, setFilterBodega] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -128,8 +142,6 @@ export default function ConteosPage() {
     defaultValues: { bodegaId: "", tipoConteo: "COMPLETO", notas: "" },
   });
 
-  const tipoConteo = createForm.watch("tipoConteo");
-
   const barcodeScanner = useBarcodeScanner({
     autoStop: false,
     scannerElementId: "barcode-scanner-camera",
@@ -137,7 +149,7 @@ export default function ConteosPage() {
       handleBarcodeScanned(barcode);
     },
     onError: (err) => {
-      toast.error("Error de escáner: " + err);
+      toast.error("Error de esc\u00e1ner: " + err);
     },
   });
 
@@ -155,35 +167,58 @@ export default function ConteosPage() {
         toast.error("Producto no incluido en este conteo");
       }
     } else {
-      toast.error(`Código no reconocido: ${barcode}`);
+      toast.error(`C\u00f3digo no reconocido: ${barcode}`);
     }
   }, [productos, conteoItems, isPaused]);
 
   useEffect(() => {
-    fetchData();
+    fetchBodegas();
   }, []);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    fetchConteosAndProductos();
+  }, []);
+
+  const fetchBodegas = async () => {
+    setBodegasLoading(true);
+    try {
+      const res = await fetch("/api/bodegas?activa=true&limit=100");
+      const json = await res.json();
+      if (json.success) {
+        setBodegas(json.data || []);
+      } else {
+        console.error("Failed to load bodegas:", json.error);
+      }
+    } catch (err) {
+      console.error("Error loading bodegas:", err);
+    } finally {
+      setBodegasLoading(false);
+    }
+  };
+
+  const fetchConteosAndProductos = async () => {
     setLoading(true);
     try {
-      const [conteosRes, bodRes, prodRes] = await Promise.all([
+      const [conteosRes, prodRes] = await Promise.all([
         fetch("/api/conteos?limit=200"),
-        fetch("/api/bodegas?activa=true&limit=100"),
         fetch("/api/productos?limit=1000&estado=ACTIVO"),
       ]);
-      const [cData, bData, pData] = await Promise.all([
+      const [cData, pData] = await Promise.all([
         conteosRes.json(),
-        bodRes.json(),
         prodRes.json(),
       ]);
       if (cData.success) setConteos(cData.data || []);
-      if (bData.success) setBodegas(bData.data || []);
       if (pData.success) setProductos(pData.data || []);
     } catch (err) {
       console.error("Error loading data:", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const refreshAll = () => {
+    fetchBodegas();
+    fetchConteosAndProductos();
   };
 
   const filteredConteos = useMemo(() => {
@@ -194,7 +229,7 @@ export default function ConteosPage() {
         const q = searchQuery.toLowerCase();
         return (
           (c.bodega?.nombre || "").toLowerCase().includes(q) ||
-          c.notas?.toLowerCase().includes(q) ||
+          (c.notas || "").toLowerCase().includes(q) ||
           c.id.toLowerCase().includes(q)
         );
       }
@@ -218,7 +253,11 @@ export default function ConteosPage() {
         setShowCreateModal(false);
         createForm.reset();
         toast.success("Conteo creado exitosamente");
-        fetchData();
+        refreshAll();
+        if (json.data) {
+          const newConteo = json.data as ConteoData;
+          handleStartConteo(newConteo);
+        }
       } else {
         toast.error(json.error || "Error al crear conteo");
       }
@@ -236,7 +275,7 @@ export default function ConteosPage() {
       const res = await fetch(`/api/conteos?id=${conteo.id}`);
       const json = await res.json();
       if (json.success) {
-        const items = json.data?.items || [];
+        const items: ConteoItemData[] = json.data?.items || [];
         setConteoItems(items);
         const phi: Record<string, number> = {};
         const notes: Record<string, string> = {};
@@ -369,7 +408,7 @@ export default function ConteosPage() {
         setSelectedConteo(null);
         setConteoItems([]);
         stopCameraIfActive();
-        fetchData();
+        refreshAll();
       } else {
         toast.error(json.error || "Error al finalizar conteo");
       }
@@ -395,7 +434,7 @@ export default function ConteosPage() {
       const json = await res.json();
       if (json.success) {
         setDetailItems(json.data?.items || []);
-        if (conteo.estado === "CERRADO") {
+        if (conteo.estado === "CERRADO" || conteo.estado === "CONCILIADO") {
           setShowClosedViewModal(true);
         } else {
           setShowDetailModal(true);
@@ -404,7 +443,6 @@ export default function ConteosPage() {
     } catch (err) {
       console.error("Error loading detail:", err);
     }
-    if (conteo.estado !== "CERRADO") setShowDetailModal(true);
   };
 
   const handleReconcile = async () => {
@@ -422,7 +460,7 @@ export default function ConteosPage() {
         setShowClosedViewModal(false);
         setShowReconcileModal(false);
         setSelectedConteo(null);
-        fetchData();
+        refreshAll();
       } else {
         toast.error(json.error || "Error al conciliar");
       }
@@ -437,46 +475,123 @@ export default function ConteosPage() {
   const exportToPDF = async (conteo: ConteoData) => {
     let items = detailItems;
     if (items.length === 0) {
-      const res = await fetch(`/api/conteos?id=${conteo.id}`);
-      const json = await res.json();
-      items = json.success ? json.data?.items || [] : [];
+      try {
+        const res = await fetch(`/api/conteos?id=${conteo.id}`);
+        const json = await res.json();
+        items = json.success ? json.data?.items || [] : [];
+      } catch {
+        items = [];
+      }
     }
 
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text("Reporte de Conteo Fisico", 14, 20);
-    doc.setFontSize(10);
-    doc.text(`ID: ${conteo.id}`, 14, 28);
-    doc.text(`Bodega: ${conteo.bodega?.nombre || "N/A"}`, 14, 34);
-    doc.text(`Estado: ${estadoLabel[conteo.estado]}`, 14, 40);
-    doc.text(`Fecha: ${format(new Date(conteo.createdAt), "dd/MM/yyyy HH:mm")}`, 14, 46);
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    doc.setFillColor(15, 15, 46);
+    doc.rect(0, 0, pageWidth, 20, "F");
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.text("InvenPro", 14, 13);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text("Sistema de Gesti\u00f3n de Inventario", 14, 18);
+
+    doc.setFontSize(12);
+    doc.setTextColor(40, 40, 80);
+    doc.setFont("helvetica", "bold");
+    doc.text("Reporte de Conteo F\u00edsico", 14, 30);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 120);
+    doc.text(`Conteo #${conteo.id.slice(0, 8)} | Bodega: ${conteo.bodega?.nombre || "N/A"}`, 14, 36);
+    doc.text(`Estado: ${estadoLabel[conteo.estado]} | Fecha: ${format(new Date(conteo.createdAt), "dd/MM/yyyy HH:mm")} | Usuario: ${conteo.usuario?.nombre || "N/A"}`, 14, 42);
 
     const totalSistema = items.reduce((s, i) => s + i.cantidadSistema, 0);
     const totalFisico = items.reduce((s, i) => s + i.cantidadFisica, 0);
-    const itemsConDif = items.filter(i => i.diferencia !== 0).length;
-    const accuracy = items.length > 0 ? ((items.length - itemsConDif) / items.length) * 100 : 0;
+    const itemsConDif = items.filter((i) => i.diferencia !== 0);
+    const accuracy = items.length > 0 ? ((items.length - itemsConDif.length) / items.length) * 100 : 0;
 
-    doc.text(`Total Sistema: ${totalSistema} | Total Fisico: ${totalFisico} | Precision: ${accuracy.toFixed(1)}%`, 14, 52);
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 80);
+    doc.text(`Total Sistema: ${totalSistema} | Total F\u00edsico: ${totalFisico} | Diferencias: ${itemsConDif.length} | Precisi\u00f3n: ${accuracy.toFixed(1)}%`, 14, 48);
 
     const tableRows = items.map((item) => [
       item.producto?.codigo || "N/A",
       item.producto?.nombre || "N/A",
-      item.cantidadSistema.toString(),
-      item.cantidadFisica.toString(),
-      item.diferencia.toString(),
+      String(item.cantidadSistema),
+      String(item.cantidadFisica),
+      String(item.diferencia),
       item.diferencia !== 0 ? (item.diferencia > 0 ? "SOBRANTE" : "FALTANTE") : "OK",
     ]);
 
     (doc as any).autoTable({
-      startY: 58,
-      head: [["Codigo", "Producto", "Sistema", "Fisico", "Dif.", "Estado"]],
+      startY: 54,
+      head: [["C\u00f3digo", "Producto", "Cant. Sistema", "Cant. F\u00edsica", "Diferencia", "Estado"]],
       body: tableRows,
-      styles: { fontSize: 8, cellPadding: 1 },
-      headStyles: { fillColor: [79, 70, 229] },
+      styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" },
+      headStyles: { fillColor: [15, 15, 46], textColor: [255, 255, 255], fontStyle: "bold" },
+      bodyStyles: { textColor: [30, 30, 50] },
+      alternateRowStyles: { fillColor: [245, 245, 250] },
+      margin: { left: 10, right: 10 },
+      didDrawPage: () => {
+        const pageNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
+        const totalPages = (doc as any).internal.getNumberOfPages();
+        doc.setFontSize(7);
+        doc.setTextColor(130, 130, 150);
+        doc.setFont("helvetica", "normal");
+        doc.text(`P\u00e1gina ${pageNum} de ${totalPages}`, pageWidth - 25, pageHeight - 8, { align: "right" });
+        doc.text("InvenPro - Reporte de Conteo", 10, pageHeight - 8);
+      },
     });
 
-    doc.save(`conteo_${conteo.id.slice(0, 8)}.pdf`);
-    toast.success("PDF exportado");
+    const finalY = (doc as any).lastAutoTable?.finalY || 54;
+    if (finalY < pageHeight - 30) {
+      const summaryY = finalY + 10;
+      doc.setFillColor(245, 245, 250);
+      doc.rect(10, summaryY - 5, pageWidth - 20, 20, "F");
+      doc.setFontSize(9);
+      doc.setTextColor(40, 40, 80);
+      doc.setFont("helvetica", "bold");
+      doc.text("Resumen", 14, summaryY);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Total Sistema: ${totalSistema}  |  Total F\u00edsico: ${totalFisico}  |  Diferencia Neta: ${totalFisico - totalSistema}  |  Precisi\u00f3n: ${accuracy.toFixed(1)}%`, 14, summaryY + 7);
+      doc.text(`Items con diferencias: ${itemsConDif.length} de ${items.length}`, 14, summaryY + 13);
+    }
+
+    doc.save(`conteo-${conteo.id.slice(0, 8)}.pdf`);
+    toast.success("PDF exportado exitosamente");
+  };
+
+  const exportToExcel = async (conteo: ConteoData) => {
+    let items = detailItems;
+    if (items.length === 0) {
+      try {
+        const res = await fetch(`/api/conteos?id=${conteo.id}`);
+        const json = await res.json();
+        items = json.success ? json.data?.items || [] : [];
+      } catch {
+        items = [];
+      }
+    }
+
+    let csv = "\uFEFF";
+    csv += '"C\u00f3digo","Producto","Cant. Sistema","Cant. F\u00edsica","Diferencia","Estado"\n';
+
+    for (const item of items) {
+      const estado = item.diferencia !== 0 ? (item.diferencia > 0 ? "SOBRANTE" : "FALTANTE") : "OK";
+      csv += `"${item.producto?.codigo || "N/A"}",`;
+      csv += `"${(item.producto?.nombre || "N/A").replace(/"/g, '""')}",`;
+      csv += `"${item.cantidadSistema}",`;
+      csv += `"${item.cantidadFisica}",`;
+      csv += `"${item.diferencia}",`;
+      csv += `"${estado}"\n`;
+    }
+
+    downloadBlob(csv, `conteo-${conteo.id.slice(0, 8)}.csv`, "text/csv");
+    toast.success("Excel exportado exitosamente");
   };
 
   const stats = useMemo(() => {
@@ -506,7 +621,7 @@ export default function ConteosPage() {
 
   const startCamera = async () => {
     setShowCamera(true);
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 100));
     await barcodeScanner.startCameraScan();
   };
 
@@ -515,7 +630,7 @@ export default function ConteosPage() {
     setShowExecuteModal(false);
     setConteoItems([]);
     setSelectedConteo(null);
-    fetchData();
+    refreshAll();
   };
 
   useEffect(() => {
@@ -545,10 +660,10 @@ export default function ConteosPage() {
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-3">
               <ClipboardCheck className="h-7 w-7 text-indigo-400" />
-              Conteos Fisicos
+              Conteos F\u00edsicos
             </h1>
             <p className="mt-1 text-sm text-white/60">
-              Gestion de inventarios fisicos, conciliacion y ajustes
+              Gesti\u00f3n de inventarios f\u00edsicos, conciliaci\u00f3n y ajustes
             </p>
           </div>
           <Button onClick={() => setShowCreateModal(true)} className="bg-indigo-500 hover:bg-indigo-600">
@@ -699,16 +814,16 @@ export default function ConteosPage() {
                             )}
                             {conteo.estado === "CERRADO" && (
                               <>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-400" onClick={() => { setSelectedConteo(conteo); handleViewDetail(conteo); }} title="Conciliar">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-400" onClick={() => { handleViewDetail(conteo); }} title="Conciliar">
                                   <RefreshCw className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => exportToPDF(conteo)} title="Exportar PDF">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setSelectedConteo(conteo); handleViewDetail(conteo); }} title="Exportar PDF">
                                   <Download className="h-4 w-4" />
                                 </Button>
                               </>
                             )}
-                            {conteo.estado === "CONCILIADO" && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => exportToPDF(conteo)} title="Exportar PDF">
+                            {(conteo.estado === "CONCILIADO") && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setSelectedConteo(conteo); handleViewDetail(conteo); }} title="Exportar PDF">
                                 <Download className="h-4 w-4" />
                               </Button>
                             )}
@@ -730,31 +845,42 @@ export default function ConteosPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
               <ClipboardList className="h-5 w-5 text-indigo-400" />
-              Nuevo Conteo Fisico
+              Nuevo Conteo F\u00edsico
             </DialogTitle>
             <DialogDescription>
-              Configure los parametros para iniciar un nuevo conteo de inventario
+              Configure los par\u00e1metros para iniciar un nuevo conteo de inventario
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={createForm.handleSubmit(handleCreateConteo)} className="space-y-4">
             <div>
               <Label className="text-white">Bodega *</Label>
-              <Controller
-                name="bodegaId"
-                control={createForm.control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar bodega" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bodegas.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>{b.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
+              {bodegasLoading && bodegas.length === 0 ? (
+                <div className="flex items-center gap-2 rounded-md border border-white/[0.06] px-3 py-2 text-sm text-white/40">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando bodegas...
+                </div>
+              ) : bodegas.length === 0 ? (
+                <div className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-red-400">
+                  No hay bodegas disponibles. Cree una bodega primero.
+                </div>
+              ) : (
+                <Controller
+                  name="bodegaId"
+                  control={createForm.control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange} disabled={creating}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar bodega" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bodegas.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>{b.nombre}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
               {createForm.formState.errors.bodegaId && (
                 <p className="mt-1 text-xs text-red-400">{createForm.formState.errors.bodegaId.message}</p>
               )}
@@ -766,7 +892,7 @@ export default function ConteosPage() {
                 name="tipoConteo"
                 control={createForm.control}
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={creating}>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar tipo" />
                     </SelectTrigger>
@@ -794,7 +920,7 @@ export default function ConteosPage() {
               <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={creating} className="bg-indigo-500 hover:bg-indigo-600">
+              <Button type="submit" disabled={creating || bodegas.length === 0} className="bg-indigo-500 hover:bg-indigo-600">
                 {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                 Crear Conteo
               </Button>
@@ -855,7 +981,7 @@ export default function ConteosPage() {
               <div className="text-lg font-bold text-red-400">{executeStats.diffs}</div>
             </div>
             <div className="text-center">
-              <div className="text-xs text-white/50">Precision</div>
+              <div className="text-xs text-white/50">Precisi\u00f3n</div>
               <div className="text-lg font-bold text-indigo-400">{executeStats.accuracy.toFixed(1)}%</div>
             </div>
           </div>
@@ -868,7 +994,7 @@ export default function ConteosPage() {
               <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
               <Input
                 ref={barcodeInputRef}
-                placeholder={showCamera ? "Camara activa - escanee codigo..." : "Escanear codigo de barras o escriba el codigo..."}
+                placeholder={showCamera ? "C\u00e1mara activa - escanee c\u00f3digo..." : "Escanear c\u00f3digo de barras o escriba el c\u00f3digo..."}
                 className="pl-10"
                 value={manualBarcode}
                 onChange={(e) => setManualBarcode(e.target.value)}
@@ -904,7 +1030,7 @@ export default function ConteosPage() {
               }}
             >
               <Camera className="mr-2 h-4 w-4" />
-              {barcodeScanner.isScanning ? "Detener" : "Camara"}
+              {barcodeScanner.isScanning ? "Detener" : "C\u00e1mara"}
             </Button>
           </div>
 
@@ -956,7 +1082,7 @@ export default function ConteosPage() {
                       <div className="text-2xl font-bold text-indigo-400">{currentItem.cantidadSistema}</div>
                     </div>
                     <div className="rounded-lg bg-white/[0.02] p-3">
-                      <div className="text-xs text-white/50">Cantidad Fisica</div>
+                      <div className="text-xs text-white/50">Cantidad F\u00edsica</div>
                       <Input
                         type="number"
                         min={0}
@@ -974,16 +1100,21 @@ export default function ConteosPage() {
                   </div>
 
                   {currentDiff !== 0 && (
-                    <div className={cn(
-                      "rounded-lg p-3",
-                      currentDiff > 0 ? "bg-emerald-500/10" : "bg-red-500/10"
-                    )}>
+                    <div
+                      className={cn(
+                        "rounded-lg p-3",
+                        currentDiff > 0 ? "bg-emerald-500/10" : "bg-red-500/10"
+                      )}
+                    >
                       <div className="text-xs text-white/50">Diferencia</div>
-                      <div className={cn(
-                        "text-xl font-bold",
-                        currentDiff > 0 ? "text-emerald-400" : "text-red-400"
-                      )}>
-                        {currentDiff > 0 ? "+" : ""}{currentDiff}
+                      <div
+                        className={cn(
+                          "text-xl font-bold",
+                          currentDiff > 0 ? "text-emerald-400" : "text-red-400"
+                        )}
+                      >
+                        {currentDiff > 0 ? "+" : ""}
+                        {currentDiff}
                       </div>
                     </div>
                   )}
@@ -1030,7 +1161,7 @@ export default function ConteosPage() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-white/30">
                   <Package className="mb-4 h-16 w-16" />
-                  <p>Escanea un codigo de barras</p>
+                  <p>Escanea un c\u00f3digo de barras</p>
                   <p className="text-sm">o selecciona un producto de la lista</p>
                 </div>
               )}
@@ -1096,10 +1227,10 @@ export default function ConteosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-white/60">Codigo</TableHead>
+                  <TableHead className="text-white/60">C\u00f3digo</TableHead>
                   <TableHead className="text-white/60">Producto</TableHead>
                   <TableHead className="text-right text-white/60">Sistema</TableHead>
-                  <TableHead className="text-right text-white/60">Fisico</TableHead>
+                  <TableHead className="text-right text-white/60">F\u00edsico</TableHead>
                   <TableHead className="text-right text-white/60">Diferencia</TableHead>
                   <TableHead className="text-white/60">Notas</TableHead>
                 </TableRow>
@@ -1116,7 +1247,9 @@ export default function ConteosPage() {
                         <Badge variant={item.diferencia > 0 ? "success" : "destructive"} className="text-[10px]">
                           {item.diferencia > 0 ? "+" : ""}{item.diferencia}
                         </Badge>
-                      ) : "0"}
+                      ) : (
+                        "0"
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-white/40">{item.notas || "-"}</TableCell>
                   </TableRow>
@@ -1127,18 +1260,20 @@ export default function ConteosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Closed Conteo View - shows summary + reconcile */}
+      {/* Closed Conteo View - shows summary + reconcile + exports */}
       <Dialog open={showClosedViewModal} onOpenChange={setShowClosedViewModal}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
               <ClipboardCheck className="h-5 w-5 text-indigo-400" />
-              Conteo Cerrado - Resumen
+              {selectedConteo?.estado === "CONCILIADO" ? "Conteo Conciliado - Resumen" : "Conteo Cerrado - Resumen"}
             </DialogTitle>
             {selectedConteo && (
               <DialogDescription>
-                {selectedConteo.bodega?.nombre} - Cerrado el{" "}
-                {selectedConteo.fechaFin ? format(new Date(selectedConteo.fechaFin), "dd/MM/yyyy HH:mm") : "N/A"}
+                {selectedConteo.bodega?.nombre} -
+                {selectedConteo.estado === "CONCILIADO"
+                  ? ` Conciliado el ${selectedConteo.fechaFin ? format(new Date(selectedConteo.fechaFin), "dd/MM/yyyy HH:mm") : "N/A"}`
+                  : ` Cerrado el ${selectedConteo.fechaFin ? format(new Date(selectedConteo.fechaFin), "dd/MM/yyyy HH:mm") : "N/A"}`}
                 {" - Usuario: "}{selectedConteo.usuario?.nombre || "N/A"}
               </DialogDescription>
             )}
@@ -1148,7 +1283,7 @@ export default function ConteosPage() {
             const totalItems = detailItems.length;
             const totalSistema = detailItems.reduce((s, i) => s + i.cantidadSistema, 0);
             const totalFisico = detailItems.reduce((s, i) => s + i.cantidadFisica, 0);
-            const itemsWithDiff = detailItems.filter(i => i.diferencia !== 0);
+            const itemsWithDiff = detailItems.filter((i) => i.diferencia !== 0);
             const accuracy = totalItems > 0 ? ((totalItems - itemsWithDiff.length) / totalItems) * 100 : 0;
 
             return (
@@ -1163,7 +1298,7 @@ export default function ConteosPage() {
                     <div className="text-xl font-bold text-white">{totalSistema}</div>
                   </Card>
                   <Card className="bg-white/[0.02] p-3">
-                    <div className="text-xs text-white/50">Fisico Total</div>
+                    <div className="text-xs text-white/50">F\u00edsico Total</div>
                     <div className="text-xl font-bold text-white">{totalFisico}</div>
                   </Card>
                   <Card className="bg-white/[0.02] p-3">
@@ -1171,7 +1306,7 @@ export default function ConteosPage() {
                     <div className="text-xl font-bold text-amber-400">{itemsWithDiff.length}</div>
                   </Card>
                   <Card className="bg-white/[0.02] p-3">
-                    <div className="text-xs text-emerald-400">Precision</div>
+                    <div className="text-xs text-emerald-400">Precisi\u00f3n</div>
                     <div className="text-xl font-bold text-emerald-400">{accuracy.toFixed(1)}%</div>
                   </Card>
                 </div>
@@ -1185,7 +1320,7 @@ export default function ConteosPage() {
                           <TableRow>
                             <TableHead className="text-white/60">Producto</TableHead>
                             <TableHead className="text-right text-white/60">Sistema</TableHead>
-                            <TableHead className="text-right text-white/60">Fisico</TableHead>
+                            <TableHead className="text-right text-white/60">F\u00edsico</TableHead>
                             <TableHead className="text-right text-white/60">Diferencia</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -1212,16 +1347,21 @@ export default function ConteosPage() {
 
                 <DialogFooter>
                   <Button variant="outline" onClick={() => exportToPDF(selectedConteo!)}>
-                    <Download className="mr-2 h-4 w-4" /> Exportar PDF
+                    <FileText className="mr-2 h-4 w-4" /> Exportar PDF
                   </Button>
-                  <Button
-                    onClick={handleReconcile}
-                    disabled={reconciling}
-                    className="bg-amber-500 hover:bg-amber-600 text-black"
-                  >
-                    {reconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                    Conciliar (Crear Ajustes)
+                  <Button variant="outline" onClick={() => exportToExcel(selectedConteo!)}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar Excel
                   </Button>
+                  {selectedConteo?.estado !== "CONCILIADO" && (
+                    <Button
+                      onClick={handleReconcile}
+                      disabled={reconciling}
+                      className="bg-amber-500 hover:bg-amber-600 text-black"
+                    >
+                      {reconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                      Conciliar (Crear Ajustes)
+                    </Button>
+                  )}
                 </DialogFooter>
               </div>
             );
@@ -1238,14 +1378,14 @@ export default function ConteosPage() {
               Conciliar Conteo
             </DialogTitle>
             <DialogDescription>
-              Se crearan movimientos de ajuste para las diferencias encontradas.
-              Esta accion actualiza el inventario permanentemente.
+              Se crear\u00e1n movimientos de ajuste para las diferencias encontradas.
+              Esta acci\u00f3n actualiza el inventario permanentemente.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
             <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-400">
               <AlertTriangle className="mr-2 inline h-4 w-4" />
-              Al conciliar se crearan movimientos de tipo CONTEO_DIFERENCIA para cada diferencia.
+              Al conciliar se crear\u00e1n movimientos de tipo CONTEO_DIFERENCIA para cada diferencia.
             </div>
           </div>
           <DialogFooter>

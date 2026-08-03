@@ -3,8 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession, getPlanLimits, hashPassword } from "@/lib/auth";
-import { userCreateSchema, userUpdateSchema } from "@/lib/validations";
-import { sendInvitationEmail } from "@/lib/resend";
+import { userCreateSchema } from "@/lib/validations";
 
 export async function GET(request: NextRequest) {
   try {
@@ -87,6 +86,15 @@ export async function GET(request: NextRequest) {
   }
 }
 
+function generatePassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let result = "";
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result + "!1";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession();
@@ -113,7 +121,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: `Has alcanzado el límite de ${limits.maxUsers} usuarios para tu plan ${session.tenantPlan}`,
+            error: `Has alcanzado el limite de ${limits.maxUsers} usuarios para tu plan ${session.tenantPlan}`,
           },
           { status: 403 }
         );
@@ -136,12 +144,12 @@ export async function POST(request: NextRequest) {
 
     if (existingUser) {
       return NextResponse.json(
-        { success: false, error: "Ya existe un usuario con ese correo electrónico" },
+        { success: false, error: "Ya existe un usuario con ese correo electronico" },
         { status: 400 }
       );
     }
 
-    const tempPassword = Math.random().toString(36).slice(-10) + "A1b";
+    const tempPassword = generatePassword();
     const hashedPassword = await hashPassword(tempPassword);
 
     const user = await prisma.user.create({
@@ -154,36 +162,25 @@ export async function POST(request: NextRequest) {
         telefono: validation.data.telefono ?? null,
         tenantId: session.tenantId,
       },
-    });
-
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: session.tenantId },
-      select: { name: true },
-    });
-
-    const acceptUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/login`;
-
-    await sendInvitationEmail({
-      to: validation.data.email,
-      nombre: validation.data.nombre,
-      tenantName: tenant?.name ?? session.tenantName,
-      invitedBy: session.nombre,
-      acceptUrl,
-    }).catch((emailErr) => {
-      console.error("Failed to send invitation email:", emailErr);
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        rol: true,
+        estado: true,
+        telefono: true,
+        foto: true,
+        ultimoAcceso: true,
+        createdAt: true,
+      },
     });
 
     return NextResponse.json(
       {
         success: true,
-        data: {
-          id: user.id,
-          email: user.email,
-          nombre: user.nombre,
-          rol: user.rol,
-          estado: user.estado,
-        },
-        message: "Usuario creado e invitación enviada exitosamente",
+        data: user,
+        tempPassword,
+        message: "Usuario creado exitosamente",
       },
       { status: 201 }
     );

@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import { generatePDF, generateExcel, downloadFile, PDFColumn } from "@/lib/pdf-generator";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import {
@@ -59,134 +60,102 @@ const EMPTY_ROW: ReportRow = {
 const reportTypes: ReportConfig[] = [
   { type: "inventario", label: "Inventario General", description: "Reporte completo del inventario por bodega", icon: <ClipboardList className="h-6 w-6" />, color: "text-blue-400" },
   { type: "movimientos", label: "Movimientos", description: "Historial de entradas, salidas y ajustes", icon: <ArrowLeftRight className="h-6 w-6" />, color: "text-emerald-400" },
-  { type: "catalogo", label: "Catálogo de Productos", description: "Listado completo de productos con precios", icon: <Package className="h-6 w-6" />, color: "text-indigo-400" },
-  { type: "stock_bajo", label: "Alerta de Stock Bajo", description: "Productos bajo el nivel mínimo de inventario", icon: <AlertTriangle className="h-6 w-6" />, color: "text-amber-400" },
+  { type: "catalogo", label: "Cat\u00e1logo de Productos", description: "Listado completo de productos con precios", icon: <Package className="h-6 w-6" />, color: "text-indigo-400" },
+  { type: "stock_bajo", label: "Alerta de Stock Bajo", description: "Productos bajo el nivel m\u00ednimo de inventario", icon: <AlertTriangle className="h-6 w-6" />, color: "text-amber-400" },
 ];
 
 const bodegas = ["TODAS", "Bodega Central", "Bodega Norte", "Bodega Sur", "Bodega Este"];
-const categorias = ["TODAS", "Ferretería", "Electrónicos", "Construcción", "Papelería", "Pintura"];
+const categorias = ["TODAS", "Ferreter\u00eda", "Electr\u00f3nicos", "Construcci\u00f3n", "Papeler\u00eda", "Pintura"];
 
 const REPORT_LABELS: Record<ReportType, string> = {
   inventario: "Inventario General",
   movimientos: "Movimientos",
-  catalogo: "Catálogo de Productos",
+  catalogo: "Cat\u00e1logo de Productos",
   stock_bajo: "Alerta de Stock Bajo",
 };
 
+const REPORT_COLUMNS: Record<ReportType, PDFColumn[]> = {
+  inventario: [
+    { header: "C\u00f3digo", dataKey: "col1" },
+    { header: "Producto", dataKey: "col2" },
+    { header: "Bodega", dataKey: "col3" },
+    { header: "Cantidad", dataKey: "col4" },
+    { header: "Valor Total", dataKey: "col5" },
+  ],
+  movimientos: [
+    { header: "Fecha", dataKey: "col1" },
+    { header: "Tipo", dataKey: "col2" },
+    { header: "Producto", dataKey: "col3" },
+    { header: "Cantidad", dataKey: "col4" },
+    { header: "Bodega", dataKey: "col5" },
+  ],
+  catalogo: [
+    { header: "C\u00f3digo", dataKey: "col1" },
+    { header: "Producto", dataKey: "col2" },
+    { header: "Categor\u00eda", dataKey: "col3" },
+    { header: "Precio", dataKey: "col4" },
+    { header: "Estado", dataKey: "col5" },
+  ],
+  stock_bajo: [
+    { header: "C\u00f3digo", dataKey: "col1" },
+    { header: "Producto", dataKey: "col2" },
+    { header: "Bodega", dataKey: "col3" },
+    { header: "Stock Actual", dataKey: "col4" },
+    { header: "Stock M\u00edn", dataKey: "col5" },
+  ],
+};
+
 function getCSVHeaders(type: ReportType): string[] {
-  switch (type) {
-    case "inventario": return ["Código", "Producto", "Bodega", "Cantidad", "Costo Unit.", "Precio Unit.", "Valor Total"];
-    case "movimientos": return ["Fecha", "Tipo", "Producto", "Cantidad", "Costo Unit.", "Total", "Bodega", "Usuario"];
-    case "catalogo": return ["Código", "Producto", "Categoría", "Unidad", "Costo Unit.", "Precio Unit.", "Stock Mín", "Stock Máx", "Estado"];
-    case "stock_bajo": return ["Código", "Producto", "Bodega", "Stock Actual", "Stock Mín", "Déficit", "Proveedor"];
-  }
+  return REPORT_COLUMNS[type].map((c) => c.header);
 }
 
-function rowsToCSV(type: ReportType, rows: ReportRow[]): string {
-  const headers = getCSVHeaders(type);
-  let csv = "\uFEFF";
-  csv += headers.map(h => `"${h}"`).join(",") + "\n";
-
-  for (const row of rows) {
-    if (row.col1 === "" && row.col2 === "" && row.col3 === "") continue;
-    const vals = [row.col1, row.col2, row.col3, row.col4, row.col5];
-    csv += vals.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",") + "\n";
-  }
-  return csv;
-}
-
-function downloadBlob(content: string, filename: string, mimeType: string) {
-  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function generatePDF(type: ReportType, rows: ReportRow[], reportLabel: string) {
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-
-  doc.setFillColor(15, 15, 46);
-  doc.rect(0, 0, pageWidth, 20, "F");
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.text("InvenPro", 14, 13);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.text("Sistema de Gestión de Inventario", 14, 18);
-
-  doc.setFontSize(11);
-  doc.setTextColor(40, 40, 80);
-  doc.setFont("helvetica", "bold");
-  doc.text(reportLabel, 14, 30);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(100, 100, 120);
-  doc.text(`Generado: ${formatDate(new Date())}`, 14, 36);
-
-  const headers = getCSVHeaders(type);
-  const bodyData: string[][] = [];
-  for (const row of rows) {
-    if (row.col1 === "" && row.col2 === "" && row.col3 === "") continue;
-    bodyData.push([row.col1, row.col2, row.col3, row.col4, row.col5]);
-  }
-
-  (doc as any).autoTable({
-    startY: 40,
-    head: [headers],
-    body: bodyData,
-    headStyles: {
-      fillColor: [15, 15, 46],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize: 7,
-      cellPadding: 2,
-    },
-    bodyStyles: {
-      fontSize: 7,
-      textColor: [30, 30, 50],
-      cellPadding: 2,
-    },
-    alternateRowStyles: {
-      fillColor: [245, 245, 250],
-    },
-    styles: {
-      overflow: "linebreak",
-      halign: "left",
-      lineWidth: 0.1,
-    },
-    margin: { left: 10, right: 10 },
-    didDrawPage: () => {
-      const pageNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
-      const totalPages = (doc as any).internal.getNumberOfPages();
-      doc.setFontSize(7);
-      doc.setTextColor(130, 130, 150);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Página ${pageNum} de ${totalPages}`, pageWidth - 25, pageHeight - 8, { align: "right" });
-      doc.text("InvenPro - Reporte", 10, pageHeight - 8);
-    },
-  });
-
-  doc.save(`reporte_${type}_${new Date().toISOString().slice(0, 10)}.pdf`);
+function reportRowToRecord(row: ReportRow): Record<string, string> {
+  return {
+    col1: row.col1,
+    col2: row.col2,
+    col3: row.col3,
+    col4: row.col4,
+    col5: row.col5,
+  };
 }
 
 function generateExcelFile(type: ReportType, rows: ReportRow[]) {
-  const csvContent = rowsToCSV(type, rows);
-  downloadBlob(csvContent, `reporte_${type}_${new Date().toISOString().slice(0, 10)}.csv`, "text/csv");
+  const columns = REPORT_COLUMNS[type];
+  const records = rows
+    .filter((r) => r.col1 !== "" || r.col2 !== "" || r.col3 !== "" || r.col4 !== "" || r.col5 !== "")
+    .map(reportRowToRecord);
+
+  generateExcel({
+    columns,
+    rows: records,
+    filename: `reporte_${type}_${new Date().toISOString().slice(0, 10)}.csv`,
+  });
+}
+
+function generatePDFReport(type: ReportType, rows: ReportRow[]) {
+  const reportLabel = REPORT_LABELS[type];
+  const columns = REPORT_COLUMNS[type];
+  const records = rows
+    .filter((r) => r.col1 !== "" || r.col2 !== "" || r.col3 !== "" || r.col4 !== "" || r.col5 !== "")
+    .map(reportRowToRecord);
+
+  generatePDF({
+    title: reportLabel,
+    subtitle: `Reporte generado el ${formatDate(new Date())}`,
+    columns,
+    rows: records,
+    filename: `reporte_${type}_${new Date().toISOString().slice(0, 10)}.pdf`,
+    orientation: "landscape",
+    companyName: "InvenPro",
+    showPageNumbers: true,
+  });
 }
 
 function copyTableToClipboard(type: ReportType, rows: ReportRow[]) {
   const headers = getCSVHeaders(type).join("\t");
   const bodyLines = rows
-    .filter(r => r.col1 !== "" || r.col2 !== "" || r.col3 !== "")
-    .map(r => [r.col1, r.col2, r.col3, r.col4, r.col5].join("\t"));
+    .filter((r) => r.col1 !== "" || r.col2 !== "" || r.col3 !== "" || r.col4 !== "" || r.col5 !== "")
+    .map((r) => [r.col1, r.col2, r.col3, r.col4, r.col5].join("\t"));
   const text = [headers, ...bodyLines].join("\n");
   navigator.clipboard.writeText(text).then(
     () => toast.success("Datos copiados al portapapeles"),
@@ -205,9 +174,11 @@ export default function ReportesPage() {
   const [tipoMov, setTipoMov] = useState("TODOS");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState<"pdf" | "excel" | null>(null);
+  const [generatingText, setGeneratingText] = useState("");
   const [previewData, setPreviewData] = useState<ReportRow[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [apiData, setApiData] = useState<Record<string, unknown>[]>([]);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     const type = searchParams.get("tipo") as ReportType;
@@ -228,22 +199,26 @@ export default function ReportesPage() {
     setShowPreview(false);
     setPreviewData([]);
     setApiData([]);
+    setErrorMessage("");
     updateUrl("tipo", type);
   };
 
   const fetchReportData = useCallback(async (): Promise<ReportRow[]> => {
+    setErrorMessage("");
     const tipo = selectedReport === "catalogo" ? "productos" : selectedReport;
     const params = new URLSearchParams({ tipo });
     if (bodegaFilter !== "TODAS") params.set("bodega", bodegaFilter);
+    if (categoryFilter !== "TODAS") params.set("categoria", categoryFilter);
     if (dateFrom) params.set("desde", dateFrom);
     if (dateTo) params.set("hasta", dateTo);
+    if (tipoMov !== "TODOS") params.set("tipoMov", tipoMov);
 
     try {
       const res = await fetch(`/api/reportes?${params.toString()}`);
       const json = await res.json();
-      if (json.success && json.data) {
+      if (json.success && json.data && Array.isArray(json.data) && json.data.length > 0) {
         setApiData(json.data);
-        return json.data.map((item: Record<string, unknown>) => {
+        const mapped = json.data.map((item: Record<string, unknown>) => {
           const row = { ...EMPTY_ROW };
           if (selectedReport === "inventario") {
             row.col1 = String(item.codigo ?? "");
@@ -262,7 +237,7 @@ export default function ReportesPage() {
             row.col2 = String(item.nombre ?? "");
             row.col3 = String(item.categoria ?? "");
             row.col4 = formatCurrency(Number(item.precioUnit ?? 0));
-            row.col5 = "ACTIVO";
+            row.col5 = String(item.estado ?? "ACTIVO");
           } else if (selectedReport === "stock_bajo") {
             row.col1 = String(item.codigo ?? "");
             row.col2 = String(item.producto ?? "");
@@ -272,59 +247,53 @@ export default function ReportesPage() {
           }
           return row;
         });
+        return mapped;
       }
+      setErrorMessage(json.error || "No se encontraron datos para este reporte");
     } catch (err) {
       console.error("Error fetching report data:", err);
+      setErrorMessage("Error de conexi\u00f3n al obtener datos del reporte");
     }
     return generateMockData();
-  }, [selectedReport, bodegaFilter, dateFrom, dateTo]);
+  }, [selectedReport, bodegaFilter, dateFrom, dateTo, tipoMov, categoryFilter]);
 
   const generateMockData = (): ReportRow[] => {
     return Array.from({ length: 50 }, (_, i) => {
+      const row = { ...EMPTY_ROW };
       if (selectedReport === "inventario") {
-        return {
-          ...EMPTY_ROW,
-          col1: `PRD-${String(i + 1).padStart(4, "0")}`,
-          col2: `Producto ${i + 1}`,
-          col3: bodegaFilter !== "TODAS" ? bodegaFilter : bodegas[(i % (bodegas.length - 1)) + 1],
-          col4: String(Math.floor(Math.random() * 200) + (i % 5 === 0 ? 1 : 10)),
-          col5: formatCurrency(Math.round((Math.random() * 500 + 10) * (Math.random() * 100 + 1) * 100) / 100),
-        };
+        row.col1 = `PRD-${String(i + 1).padStart(4, "0")}`;
+        row.col2 = `Producto ${i + 1}`;
+        row.col3 = bodegaFilter !== "TODAS" ? bodegaFilter : bodegas[(i % (bodegas.length - 1)) + 1];
+        row.col4 = String(Math.floor(Math.random() * 200) + (i % 5 === 0 ? 1 : 10));
+        row.col5 = formatCurrency(Math.round((Math.random() * 500 + 10) * (Math.random() * 100 + 1) * 100) / 100);
       } else if (selectedReport === "movimientos") {
         const tipos = ["ENTRADA", "SALIDA", "AJUSTE", "TRASLADO"];
-        return {
-          ...EMPTY_ROW,
-          col1: formatDate(new Date(Date.now() - i * 86400000)),
-          col2: tipoMov !== "TODOS" ? tipoMov : tipos[i % 4],
-          col3: `Producto ${i + 1}`,
-          col4: String(Math.floor(Math.random() * 50) + 1),
-          col5: bodegas[(i % 4) + 1],
-        };
+        row.col1 = formatDate(new Date(Date.now() - i * 86400000));
+        row.col2 = tipoMov !== "TODOS" ? tipoMov : tipos[i % 4];
+        row.col3 = `Producto ${i + 1}`;
+        row.col4 = String(Math.floor(Math.random() * 50) + 1);
+        row.col5 = bodegas[(i % 4) + 1];
       } else if (selectedReport === "catalogo") {
-        return {
-          ...EMPTY_ROW,
-          col1: `PRD-${String(i + 1).padStart(4, "0")}`,
-          col2: `Producto ${i + 1}`,
-          col3: categoryFilter !== "TODAS" ? categoryFilter : categorias[(i % (categorias.length - 1)) + 1],
-          col4: formatCurrency(Math.round((Math.random() * 800 + 20) * 100) / 100),
-          col5: ["ACTIVO", "ACTIVO", "INACTIVO", "DESCONTINUADO"][i % 4],
-        };
+        row.col1 = `PRD-${String(i + 1).padStart(4, "0")}`;
+        row.col2 = `Producto ${i + 1}`;
+        row.col3 = categoryFilter !== "TODAS" ? categoryFilter : categorias[(i % (categorias.length - 1)) + 1];
+        row.col4 = formatCurrency(Math.round((Math.random() * 800 + 20) * 100) / 100);
+        row.col5 = ["ACTIVO", "ACTIVO", "INACTIVO", "DESCONTINUADO"][i % 4];
       } else {
-        return {
-          ...EMPTY_ROW,
-          col1: `PRD-${String(i + 1).padStart(4, "0")}`,
-          col2: `Producto ${i + 1}`,
-          col3: bodegaFilter !== "TODAS" ? bodegaFilter : bodegas[(i % 4) + 1],
-          col4: String(Math.floor(Math.random() * 5) + 1),
-          col5: String(Math.floor(Math.random() * 10) + 5),
-        };
+        row.col1 = `PRD-${String(i + 1).padStart(4, "0")}`;
+        row.col2 = `Producto ${i + 1}`;
+        row.col3 = bodegaFilter !== "TODAS" ? bodegaFilter : bodegas[(i % 4) + 1];
+        row.col4 = String(Math.floor(Math.random() * 5) + 1);
+        row.col5 = String(Math.floor(Math.random() * 10) + 5);
       }
+      return row;
     });
   };
 
   const generatePreview = async () => {
     setLoading(true);
     setShowPreview(false);
+    setErrorMessage("");
 
     const data = await fetchReportData();
     const limited = data.slice(0, 100);
@@ -342,28 +311,31 @@ export default function ReportesPage() {
     const label = format === "pdf" ? "PDF" : "Excel";
     const reportLabel = REPORT_LABELS[selectedReport];
     setGenerating(format);
-    toast.success(`Preparando ${label} del reporte "${reportLabel}"...`);
+    setGeneratingText(`Generando ${label}...`);
 
     let data = previewData;
     if (data.length === 0) {
       data = await fetchReportData();
     }
 
-    if (format === "pdf") {
-      generatePDF(selectedReport, data, reportLabel);
-    } else {
-      generateExcelFile(selectedReport, data);
-    }
+    setTimeout(() => {
+      if (format === "pdf") {
+        generatePDFReport(selectedReport, data);
+      } else {
+        generateExcelFile(selectedReport, data);
+      }
 
-    toast.success(`Reporte ${label} descargado exitosamente`);
-    setGenerating(null);
+      toast.success(`Reporte ${label} descargado exitosamente`);
+      setGenerating(null);
+      setGeneratingText("");
+    }, 300);
   };
 
   const getPreviewHeaders = () => {
     return getCSVHeaders(selectedReport);
   };
 
-  const getPreviewRowData = (row: ReportRow) => {
+  const getPreviewRowData = (row: ReportRow): string[] => {
     return [row.col1, row.col2, row.col3, row.col4, row.col5];
   };
 
@@ -371,7 +343,7 @@ export default function ReportesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-white">Reportes</h1>
-        <p className="text-sm text-muted-foreground">Generación de reportes y exportación de datos</p>
+        <p className="text-sm text-muted-foreground">Generaci\u00f3n de reportes y exportaci\u00f3n de datos</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -400,7 +372,7 @@ export default function ReportesPage() {
 
       <Card className="border-white/[0.04] bg-[#0a0a2a]/60">
         <CardHeader>
-          <CardTitle className="text-white">Configuración del Reporte</CardTitle>
+          <CardTitle className="text-white">Configuraci\u00f3n del Reporte</CardTitle>
           <CardDescription>{reportTypes.find((r) => r.type === selectedReport)?.label}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -410,27 +382,48 @@ export default function ReportesPage() {
                 <Label className="text-xs text-muted-foreground">Bodega</Label>
                 <select
                   value={bodegaFilter}
-                  onChange={(e) => { setBodegaFilter(e.target.value); updateUrl("bodega", e.target.value !== "TODAS" ? e.target.value : ""); }}
+                  onChange={(e) => {
+                    setBodegaFilter(e.target.value);
+                    updateUrl("bodega", e.target.value !== "TODAS" ? e.target.value : "");
+                  }}
                   className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white"
                 >
-                  {bodegas.map((b) => <option key={b} value={b}>{b}</option>)}
+                  {bodegas.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
 
-            {(selectedReport === "movimientos") && (
+            {selectedReport === "movimientos" && (
               <>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Desde</Label>
-                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40 text-xs" />
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-40 text-xs"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Hasta</Label>
-                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40 text-xs" />
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-40 text-xs"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Tipo</Label>
-                  <select value={tipoMov} onChange={(e) => setTipoMov(e.target.value)} className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
+                  <select
+                    value={tipoMov}
+                    onChange={(e) => setTipoMov(e.target.value)}
+                    className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white"
+                  >
                     <option value="TODOS">Todos</option>
                     <option value="ENTRADA">Entrada</option>
                     <option value="SALIDA">Salida</option>
@@ -440,47 +433,71 @@ export default function ReportesPage() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Bodega</Label>
-                  <select value={bodegaFilter} onChange={(e) => setBodegaFilter(e.target.value)} className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
-                    {bodegas.map((b) => <option key={b} value={b}>{b}</option>)}
+                  <select
+                    value={bodegaFilter}
+                    onChange={(e) => setBodegaFilter(e.target.value)}
+                    className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white"
+                  >
+                    {bodegas.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </>
             )}
 
-            {(selectedReport === "catalogo") && (
+            {selectedReport === "catalogo" && (
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Categoría</Label>
-                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
-                  {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+                <Label className="text-xs text-muted-foreground">Categor\u00eda</Label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white"
+                >
+                  {categorias.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
 
             <div className="flex gap-2 self-end">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleAction("pdf")}
-                disabled={!!generating}
-              >
-                {generating === "pdf" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileText className="mr-1 h-4 w-4" />}
-                PDF
+              <Button variant="outline" size="sm" onClick={() => handleAction("pdf")} disabled={!!generating}>
+                {generating === "pdf" ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="mr-1 h-4 w-4" />
+                )}
+                {generating === "pdf" ? generatingText : "PDF"}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleAction("excel")}
-                disabled={!!generating}
-              >
-                {generating === "excel" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Download className="mr-1 h-4 w-4" />}
-                Excel
+              <Button variant="outline" size="sm" onClick={() => handleAction("excel")} disabled={!!generating}>
+                {generating === "excel" ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-1 h-4 w-4" />
+                )}
+                {generating === "excel" ? generatingText : "Excel"}
               </Button>
               <Button size="sm" onClick={() => handleAction("preview")} disabled={loading}>
-                {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Eye className="mr-1 h-4 w-4" />}
+                {loading ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Eye className="mr-1 h-4 w-4" />
+                )}
                 Vista Previa
               </Button>
             </div>
           </div>
+
+          {errorMessage && (
+            <div className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/5 p-2 text-xs text-amber-400">
+              {errorMessage}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -491,7 +508,9 @@ export default function ReportesPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-white">Vista Previa</CardTitle>
-                  <CardDescription>Primeros {previewData.length} resultados</CardDescription>
+                  <CardDescription>
+                    Primeros {previewData.length} resultados
+                  </CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => copyTableToClipboard(selectedReport, previewData)}>
@@ -499,7 +518,8 @@ export default function ReportesPage() {
                     Copiar
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => handleAction("pdf")}>
-                    <Printer className="mr-1 h-4 w-4" />Imprimir
+                    <Printer className="mr-1 h-4 w-4" />
+                    Imprimir
                   </Button>
                 </div>
               </div>
@@ -507,25 +527,35 @@ export default function ReportesPage() {
             <CardContent>
               {loading ? (
                 <div className="space-y-2">
-                  {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
                 </div>
               ) : (
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                <div className="max-h-[500px] overflow-x-auto overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 z-10 bg-[#0a0a2a]">
                       <tr className="border-b border-white/[0.04] text-left text-xs text-muted-foreground">
                         {getPreviewHeaders().map((h) => (
-                          <th key={h} className="pb-3 pr-4 font-medium whitespace-nowrap">{h}</th>
+                          <th key={h} className="pb-3 pr-4 font-medium whitespace-nowrap">
+                            {h}
+                          </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {previewData.map((row, i) => {
                         const cols = getPreviewRowData(row);
+                        if (!cols.some((c) => c !== "")) return null;
                         return (
                           <tr key={i} className="border-b border-white/[0.02] transition-colors hover:bg-white/[0.02]">
                             {cols.map((val, j) => (
-                              <td key={j} className={`py-2.5 pr-4 whitespace-nowrap ${j === 0 ? "font-mono text-xs text-indigo-400" : "text-white"}`}>
+                              <td
+                                key={j}
+                                className={`py-2.5 pr-4 whitespace-nowrap ${
+                                  j === 0 ? "font-mono text-xs text-indigo-400" : "text-white"
+                                }`}
+                              >
                                 {val}
                               </td>
                             ))}

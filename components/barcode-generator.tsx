@@ -187,96 +187,12 @@ function renderBars(segments: number[], singleUnit: number, barHeight: number): 
 
 function renderBinaryBars(pattern: string, singleUnit: number, barHeight: number): React.ReactNode[] {
   const rects: React.ReactNode[] = [];
-  let xPos = 0;
   for (let i = 0; i < pattern.length; i++) {
     if (pattern[i] === "1") {
-      rects.push(<rect key={i} x={xPos} y={0} width={singleUnit} height={barHeight} fill="currentColor" />);
+      rects.push(<rect key={i} x={i * singleUnit} y={0} width={singleUnit} height={barHeight} fill="currentColor" />);
     }
-    xPos += singleUnit;
   }
   return rects;
-}
-
-function getAllCode128Bars(value: string, width: number): { bars: React.ReactNode[]; totalX: number } {
-  const segments = encodeCode128(value);
-  const totalWidth = segments.reduce((sum, idx) => sum + CODE128_PATTERNS[idx].reduce((s, v) => s + v, 0), 0);
-  const singleUnit = width / totalWidth;
-  const allBars: React.ReactNode[] = [];
-  let xOffset = 0;
-  for (let i = 0; i < segments.length; i++) {
-    const pattern = CODE128_PATTERNS[segments[i]];
-    allBars.push(
-      <g key={i} transform={`translate(${xOffset}, 0)`}>
-        {renderBars(pattern, singleUnit, 1)}
-      </g>
-    );
-    xOffset += pattern.reduce((s, v) => s + v, 0) * singleUnit;
-  }
-  return { bars: allBars, totalX: xOffset };
-}
-
-function barcodeToSVGString(
-  value: string,
-  format: "CODE128" | "CODE39" | "EAN13" | "EAN8" | "UPC",
-  width: number,
-  height: number,
-  displayValue: boolean,
-  fontSize: number
-): string {
-  const barHeight = displayValue ? height * 0.82 : height;
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
-  svg += `<rect width="${width}" height="${height}" fill="#ffffff"/>`;
-
-  if (format === "CODE128") {
-    const segments = encodeCode128(value);
-    const totalWidth = segments.reduce((sum, idx) => sum + CODE128_PATTERNS[idx].reduce((s, v) => s + v, 0), 0);
-    const singleUnit = width / totalWidth;
-    let xOffset = 0;
-
-    for (let i = 0; i < segments.length; i++) {
-      const pattern = CODE128_PATTERNS[segments[i]];
-      let localX = 0;
-      for (let j = 0; j < pattern.length; j++) {
-        const w = pattern[j] * singleUnit;
-        if (j % 2 === 0) {
-          svg += `<rect x="${xOffset + localX}" y="0" width="${w}" height="${barHeight}" fill="#000000"/>`;
-        }
-        localX += w;
-      }
-      xOffset += pattern.reduce((s, v) => s + v, 0) * singleUnit;
-    }
-  } else if (format === "CODE39") {
-    const pattern = encodeCode39(value);
-    const su = width / pattern.length;
-    for (let i = 0; i < pattern.length; i++) {
-      if (pattern[i] === "1") svg += `<rect x="${i * su}" y="0" width="${su}" height="${barHeight}" fill="#000000"/>`;
-    }
-  } else if (format === "EAN13") {
-    const pattern = encodeEAN13(value);
-    const su = width / pattern.length;
-    for (let i = 0; i < pattern.length; i++) {
-      if (pattern[i] === "1") svg += `<rect x="${i * su}" y="0" width="${su}" height="${barHeight}" fill="#000000"/>`;
-    }
-  } else if (format === "EAN8") {
-    const pattern = encodeEAN8(value);
-    const su = width / pattern.length;
-    for (let i = 0; i < pattern.length; i++) {
-      if (pattern[i] === "1") svg += `<rect x="${i * su}" y="0" width="${su}" height="${barHeight}" fill="#000000"/>`;
-    }
-  } else if (format === "UPC") {
-    const pattern = encodeUPC(value);
-    const su = width / pattern.length;
-    for (let i = 0; i < pattern.length; i++) {
-      if (pattern[i] === "1") svg += `<rect x="${i * su}" y="0" width="${su}" height="${barHeight}" fill="#000000"/>`;
-    }
-  }
-
-  if (displayValue) {
-    svg += `<text x="${width / 2}" y="${height - 2}" text-anchor="middle" font-size="${fontSize}" font-family="monospace" fill="#000000">${escapeXml(value)}</text>`;
-  }
-
-  svg += `</svg>`;
-  return svg;
 }
 
 function escapeXml(s: string): string {
@@ -296,11 +212,25 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({
     if (!value || value.trim().length === 0) return null;
 
     const barH = displayValue ? height * 0.82 : height;
-    const textH = displayValue ? height * 0.18 : 0;
 
     try {
       if (format === "CODE128") {
-        const { bars, totalX } = getAllCode128Bars(value, width);
+        const segments = encodeCode128(value);
+        const totalWidth = segments.reduce((sum, idx) => sum + CODE128_PATTERNS[idx].reduce((s, v) => s + v, 0), 0);
+        const singleUnit = width / totalWidth;
+        const allBars: React.ReactNode[] = [];
+        let xOffset = 0;
+
+        for (let i = 0; i < segments.length; i++) {
+          const pattern = CODE128_PATTERNS[segments[i]];
+          allBars.push(
+            <g key={i} transform={`translate(${xOffset}, 0)`}>
+              {renderBars(pattern, singleUnit, 1)}
+            </g>
+          );
+          xOffset += pattern.reduce((s, v) => s + v, 0) * singleUnit;
+        }
+
         return (
           <svg
             width={width}
@@ -310,7 +240,7 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({
             style={{ backgroundColor: "#ffffff", color: "#000000" }}
           >
             <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
-            <g transform="translate(0, 0)">{bars}</g>
+            <g transform="translate(0, 0)">{allBars}</g>
             {displayValue && (
               <text
                 x={width / 2}
@@ -438,6 +368,70 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({
 
   return barcodeContent;
 };
+
+function barcodeToSVGString(
+  value: string,
+  format: "CODE128" | "CODE39" | "EAN13" | "EAN8" | "UPC",
+  width: number,
+  height: number,
+  displayValue: boolean,
+  fontSize: number
+): string {
+  const barHeight = displayValue ? height * 0.82 : height;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+  svg += `<rect width="${width}" height="${height}" fill="#ffffff"/>`;
+
+  if (format === "CODE128") {
+    const segments = encodeCode128(value);
+    const totalWidth = segments.reduce((sum, idx) => sum + CODE128_PATTERNS[idx].reduce((s, v) => s + v, 0), 0);
+    const singleUnit = width / totalWidth;
+    let xOffset = 0;
+
+    for (let i = 0; i < segments.length; i++) {
+      const pattern = CODE128_PATTERNS[segments[i]];
+      let localX = 0;
+      for (let j = 0; j < pattern.length; j++) {
+        const w = pattern[j] * singleUnit;
+        if (j % 2 === 0) {
+          svg += `<rect x="${xOffset + localX}" y="0" width="${w}" height="${barHeight}" fill="#000000"/>`;
+        }
+        localX += w;
+      }
+      xOffset += pattern.reduce((s, v) => s + v, 0) * singleUnit;
+    }
+  } else if (format === "CODE39") {
+    const pattern = encodeCode39(value);
+    const su = width / pattern.length;
+    for (let i = 0; i < pattern.length; i++) {
+      if (pattern[i] === "1") svg += `<rect x="${i * su}" y="0" width="${su}" height="${barHeight}" fill="#000000"/>`;
+    }
+  } else if (format === "EAN13") {
+    const pattern = encodeEAN13(value);
+    const su = width / pattern.length;
+    for (let i = 0; i < pattern.length; i++) {
+      if (pattern[i] === "1") svg += `<rect x="${i * su}" y="0" width="${su}" height="${barHeight}" fill="#000000"/>`;
+    }
+  } else if (format === "EAN8") {
+    const pattern = encodeEAN8(value);
+    const su = width / pattern.length;
+    for (let i = 0; i < pattern.length; i++) {
+      if (pattern[i] === "1") svg += `<rect x="${i * su}" y="0" width="${su}" height="${barHeight}" fill="#000000"/>`;
+    }
+  } else if (format === "UPC") {
+    const pattern = encodeUPC(value);
+    const su = width / pattern.length;
+    for (let i = 0; i < pattern.length; i++) {
+      if (pattern[i] === "1") svg += `<rect x="${i * su}" y="0" width="${su}" height="${barHeight}" fill="#000000"/>`;
+    }
+  }
+
+  if (displayValue) {
+    svg += `<text x="${width / 2}" y="${height - 2}" text-anchor="middle" font-size="${fontSize}" font-family="monospace" fill="#000000">${escapeXml(value)}</text>`;
+  }
+
+  svg += `</svg>`;
+  return svg;
+}
 
 export function barcodeToCanvasDataURL(
   value: string,

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Tags, Printer, FileText, Download, Plus, Search, X, Package, Barcode,
-  Loader2, ScanLine, Settings, Grid3X3, Layers,
+  Loader2, ScanLine, Settings, Grid3X3, Layers, Camera, CameraOff,
 } from "lucide-react";
 import jsPDF from "jspdf";
 
@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import BarcodeGenerator, { barcodeToCanvasDataURL } from "@/components/barcode-generator";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { formatCurrency, cn } from "@/lib/utils";
 
 interface ProductoOption {
@@ -51,6 +52,12 @@ const LABEL_TEMPLATES: LabelTemplate[] = [
   { id: "large", name: "Grande", width: 100, height: 50, columns: 2, rows: 5, label: "100x50mm" },
 ];
 
+const PDF_LAYOUT: Record<string, { cols: number; rows: number }> = {
+  small: { cols: 4, rows: 10 },
+  medium: { cols: 3, rows: 8 },
+  large: { cols: 2, rows: 5 },
+};
+
 const COMPANY_NAME = "InvenPro";
 
 export default function EtiquetasPage() {
@@ -68,12 +75,42 @@ export default function EtiquetasPage() {
   const [activeTab, setActiveTab] = useState("single");
   const [batchSelectMode, setBatchSelectMode] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<Set<string>>(new Set());
+  const [companyNameState, setCompanyNameState] = useState(COMPANY_NAME);
+  const [cameraActive, setCameraActive] = useState(false);
 
   const previewRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  const scannerDivRef = useRef<HTMLDivElement>(null);
+
+  const handleBarcodeScanned = useCallback((value: string) => {
+    setBarcodeInput(value);
+    const found = productos.find(
+      (p) => p.codigoBarras === value.trim() || p.codigo === value.trim()
+    );
+    if (found) {
+      addProduct(found);
+      setBarcodeInput("");
+    }
+  }, [productos]);
+
+  const {
+    scannedValue,
+    isScanning,
+    isPaused,
+    startCameraScan,
+    stopCameraScan,
+    pauseScanning,
+    resumeScanning,
+  } = useBarcodeScanner({
+    autoStop: true,
+    scannerElementId: "barcode-scanner-camera",
+    onScan: handleBarcodeScanned,
+    onError: (err) => console.warn("Scanner error:", err),
+  });
 
   useEffect(() => {
     fetchProductos();
+    fetchCompanyName();
   }, []);
 
   useEffect(() => {
@@ -85,6 +122,17 @@ export default function EtiquetasPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (scannedValue) {
+      const found = productos.find(
+        (p) => p.codigoBarras === scannedValue.trim() || p.codigo === scannedValue.trim()
+      );
+      if (found) {
+        addProduct(found);
+      }
+    }
+  }, [scannedValue, productos]);
 
   const fetchProductos = async () => {
     setLoading(true);
@@ -99,18 +147,17 @@ export default function EtiquetasPage() {
     }
   };
 
-  const filteredProductos = useMemo(() => {
-    if (!productoSearch.trim()) return productos;
-    const q = productoSearch.toLowerCase();
-    return productos.filter(
-      (p) =>
-        p.nombre.toLowerCase().includes(q) ||
-        p.codigo.toLowerCase().includes(q) ||
-        (p.codigoBarras && p.codigoBarras.includes(q))
-    );
-  }, [productos, productoSearch]);
+  const fetchCompanyName = async () => {
+    try {
+      const res = await fetch("/api/tenant");
+      const data = await res.json();
+      if (data.success && data.data?.config?.empresa?.nombre) {
+        setCompanyNameState(data.data.config.empresa.nombre);
+      }
+    } catch {}
+  };
 
-  const addProduct = (producto: ProductoOption) => {
+  const addProduct = useCallback((producto: ProductoOption) => {
     setSelectedProducts((prev) => {
       const exists = prev.find((p) => p.id === producto.id);
       if (exists) {
@@ -125,7 +172,7 @@ export default function EtiquetasPage() {
     });
     setProductoSearch("");
     setShowDropdown(false);
-  };
+  }, [copiesPerProduct, showPriceOnLabel]);
 
   const removeProduct = (productoId: string) => {
     setSelectedProducts((prev) => prev.filter((p) => p.id !== productoId));
@@ -138,6 +185,20 @@ export default function EtiquetasPage() {
     );
     if (found) addProduct(found);
     setBarcodeInput("");
+  };
+
+  const toggleCameraScanner = async () => {
+    if (isScanning) {
+      stopCameraScan();
+      setCameraActive(false);
+    } else {
+      setCameraActive(true);
+      try {
+        await startCameraScan();
+      } catch {
+        setCameraActive(false);
+      }
+    }
   };
 
   const generateLabelBarcodeCanvas = async (
@@ -185,8 +246,19 @@ export default function EtiquetasPage() {
         }
       }
 
+      const firstCode = selectedProducts[0]?.codigo || "productos";
+      const barcodeCanvases = new Map<string, string>();
+      for (const sp of selectedProducts) {
+        const bv = sp.codigoBarras || sp.codigo;
+        if (!barcodeCanvases.has(bv)) {
+          const barcodeWidthPx = Math.round(labelW * 0.75 * 3.78);
+          const barcodeHeightPx = Math.round(7 * 3.78);
+          const dataUrl = await generateLabelBarcodeCanvas(bv, barcodeWidthPx, barcodeHeightPx);
+          if (dataUrl) barcodeCanvases.set(bv, dataUrl);
+        }
+      }
+
       for (let idx = 0; idx < allLabels.length; idx++) {
-        const pageIdx = Math.floor(idx / perPage);
         const labelIdx = idx % perPage;
         const col = labelIdx % cols;
         const row = Math.floor(labelIdx / cols);
@@ -206,7 +278,7 @@ export default function EtiquetasPage() {
         doc.setFontSize(5);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(40, 40, 60);
-        doc.text(COMPANY_NAME, x + labelW / 2, y + 3.5, { align: "center", maxWidth: labelW - 2 });
+        doc.text(companyNameState, x + labelW / 2, y + 3.5, { align: "center", maxWidth: labelW - 2 });
 
         doc.setFontSize(4.5);
         doc.setFont("helvetica", "normal");
@@ -214,27 +286,29 @@ export default function EtiquetasPage() {
         const nameText = producto.nombre.length > 20 ? producto.nombre.substring(0, 19) + ".." : producto.nombre;
         doc.text(nameText, x + labelW / 2, y + 6.5, { align: "center", maxWidth: labelW - 2 });
 
-        const barcodeWidth = Math.min(labelW * 0.75, 35);
-        const barcodeHeight = 7;
-        const barcodeX = x + labelW / 2 - barcodeWidth / 2;
-        const barcodeY = y + 8;
-
-        doc.setFillColor(255, 255, 255);
-        doc.rect(barcodeX, barcodeY, barcodeWidth, barcodeHeight, "F");
-
-        doc.setFontSize(4);
-        doc.setFont("helvetica", "normal");
-        const barcodeBars = generateCode128BarsToPDF(barcodeValue, barcodeWidth, barcodeHeight);
-        doc.setTextColor(0, 0, 0);
-        for (const bar of barcodeBars) {
-          doc.setFillColor(0, 0, 0);
-          doc.rect(barcodeX + bar.x, barcodeY, bar.w, barcodeHeight, "F");
+        const barcodeDataUrl = barcodeCanvases.get(barcodeValue);
+        if (barcodeDataUrl) {
+          const barcodeWidth = Math.min(labelW * 0.75, 35);
+          const barcodeHeight = 7;
+          const barcodeX = x + labelW / 2 - barcodeWidth / 2;
+          const barcodeY = y + 8;
+          doc.addImage(barcodeDataUrl, "PNG", barcodeX, barcodeY, barcodeWidth, barcodeHeight);
+        } else {
+          const barcodeWidth = Math.min(labelW * 0.75, 35);
+          const barcodeHeight = 7;
+          const barcodeX = x + labelW / 2 - barcodeWidth / 2;
+          const barcodeY = y + 8;
+          const bars = generateCode128BarsToPDF(barcodeValue, barcodeWidth, barcodeHeight);
+          for (const bar of bars) {
+            doc.setFillColor(0, 0, 0);
+            doc.rect(barcodeX + bar.x, barcodeY, bar.w, barcodeHeight, "F");
+          }
         }
 
         doc.setFontSize(3.5);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(80, 80, 80);
-        doc.text(barcodeValue, x + labelW / 2, barcodeY + barcodeHeight + 2.2, { align: "center", maxWidth: labelW - 2 });
+        doc.text(barcodeValue, x + labelW / 2, y + 17, { align: "center", maxWidth: labelW - 2 });
 
         if (producto.precioUnit > 0) {
           doc.setFontSize(6);
@@ -252,7 +326,8 @@ export default function EtiquetasPage() {
         }
       }
 
-      doc.save(`etiquetas_${new Date().toISOString().slice(0, 10)}.pdf`);
+      const filenameCode = selectedProducts[0]?.codigo || "productos";
+      doc.save(`etiquetas-${filenameCode}.pdf`);
     } catch (err) {
       console.error("Error generating PDF:", err);
     } finally {
@@ -262,9 +337,6 @@ export default function EtiquetasPage() {
 
   const handlePrint = () => {
     if (selectedProducts.length === 0) return;
-
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
 
     const template = selectedTemplate;
     const allLabels: { producto: SelectedProduct; barcodeValue: string }[] = [];
@@ -279,21 +351,17 @@ export default function EtiquetasPage() {
       .map(({ producto, barcodeValue }) => {
         const encode = (s: string) =>
           s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
         const bars = generateCode128BarsToPDF(barcodeValue, template.width * 0.75, 7);
         let barsSvg = "";
         for (const bar of bars) {
           barsSvg += `<rect x="${bar.x}" y="0" width="${bar.w}" height="7" fill="#000"/>`;
         }
-
         return `
           <div style="width:${template.width}mm;height:${template.height}mm;border:0.15mm solid #ccc;border-radius:0.8mm;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Arial,sans-serif;padding:1mm;box-sizing:border-box;page-break-inside:avoid;">
-            <div style="font-size:4pt;font-weight:bold;color:#28283c;">${encode(COMPANY_NAME)}</div>
+            <div style="font-size:4pt;font-weight:bold;color:#28283c;">${encode(companyNameState)}</div>
             <div style="font-size:3.5pt;color:#3c3c50;margin-top:0.3mm;text-align:center;max-width:${template.width - 2}mm;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${encode(producto.nombre)}</div>
             <div style="margin-top:0.5mm;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="${template.width * 0.75}mm" height="7mm" viewBox="0 0 ${template.width * 0.75} 7">
-                ${barsSvg}
-              </svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="${template.width * 0.75}mm" height="7mm" viewBox="0 0 ${template.width * 0.75} 7">${barsSvg}</svg>
             </div>
             <div style="font-size:2.5pt;color:#505050;margin-top:0.2mm;">${encode(barcodeValue)}</div>
             ${producto.precioUnit > 0 ? `<div style="font-size:4pt;font-weight:bold;color:#141428;margin-top:0.3mm;">${formatCurrency(producto.precioUnit)}</div>` : ""}
@@ -301,11 +369,14 @@ export default function EtiquetasPage() {
       })
       .join("\n");
 
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Etiquetas - InvenPro</title>
+        <title>Etiquetas - ${companyNameState}</title>
         <style>
           @page { size: A4; margin: 8mm; }
           body { margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm; justify-content: flex-start; }
@@ -336,6 +407,17 @@ export default function EtiquetasPage() {
     setSelectedBatch(new Set());
     setBatchSelectMode(false);
   };
+
+  const filteredProductos = useMemo(() => {
+    if (!productoSearch.trim()) return productos;
+    const q = productoSearch.toLowerCase();
+    return productos.filter(
+      (p) =>
+        p.nombre.toLowerCase().includes(q) ||
+        p.codigo.toLowerCase().includes(q) ||
+        (p.codigoBarras && p.codigoBarras.includes(q))
+    );
+  }, [productos, productoSearch]);
 
   if (loading) {
     return (
@@ -383,30 +465,35 @@ export default function EtiquetasPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label>Plantilla</Label>
-                  <Select
-                    value={selectedTemplate.id}
-                    onValueChange={(v) => {
-                      const t = LABEL_TEMPLATES.find((lt) => lt.id === v);
-                      if (t) setSelectedTemplate(t);
-                    }}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {LABEL_TEMPLATES.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>{t.name} ({t.label})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Tamaño de Etiqueta</Label>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    {LABEL_TEMPLATES.map((t) => (
+                      <Button
+                        key={t.id}
+                        variant={selectedTemplate.id === t.id ? "default" : "outline"}
+                        size="sm"
+                        className="text-xs h-auto py-2"
+                        onClick={() => setSelectedTemplate(t)}
+                      >
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="font-medium">{t.name}</span>
+                          <span className="text-[10px] opacity-70">{t.label}</span>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
                 </div>
                 <div>
-                  <Label>Copias por producto</Label>
+                  <Label>Cantidad por producto (1-100)</Label>
                   <Input
                     type="number"
                     min={1}
                     max={100}
                     value={copiesPerProduct}
-                    onChange={(e) => setCopiesPerProduct(parseInt(e.target.value) || 1)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (val >= 1 && val <= 100) setCopiesPerProduct(val);
+                    }}
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -448,14 +535,40 @@ export default function EtiquetasPage() {
                           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleScanBarcode(); } }}
                         />
                       </div>
-                      <Button variant="outline" onClick={handleScanBarcode}><Search className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="icon" onClick={handleScanBarcode}>
+                        <Search className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={cameraActive ? "default" : "outline"}
+                        size="icon"
+                        onClick={toggleCameraScanner}
+                      >
+                        {cameraActive ? <CameraOff className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                      </Button>
                     </div>
+
+                    {cameraActive && (
+                      <div className="rounded-md overflow-hidden border border-white/10">
+                        <div
+                          id="barcode-scanner-camera"
+                          ref={scannerDivRef}
+                          className="w-full"
+                          style={{ minHeight: 200 }}
+                        />
+                        {isScanning && (
+                          <div className="flex items-center justify-center gap-2 p-2 bg-primary/10 text-xs text-primary">
+                            <Camera className="h-3 w-3 animate-pulse" />
+                            Escaneando... Acerca un código al lector
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div ref={searchRef} className="relative">
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                          placeholder="Buscar producto..."
+                          placeholder="Buscar producto por nombre o código..."
                           className="pl-10"
                           value={productoSearch}
                           onChange={(e) => { setProductoSearch(e.target.value); setShowDropdown(true); }}
@@ -546,6 +659,9 @@ export default function EtiquetasPage() {
                   <Tags className="h-5 w-5 text-primary" />
                   Productos Seleccionados ({selectedProducts.length})
                 </CardTitle>
+                <CardDescription>
+                  Total de etiquetas: {selectedProducts.reduce((sum, p) => sum + p.quantity, 0)}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 max-h-64 overflow-auto">
                 {selectedProducts.length === 0 ? (
@@ -556,16 +672,18 @@ export default function EtiquetasPage() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{sp.nombre}</div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{sp.codigo}</span><span>x{sp.quantity}</span>
+                          <span>{sp.codigo}</span>
+                          <span className="text-primary">x{sp.quantity}</span>
                         </div>
                       </div>
                       <Input
-                        type="number" min={0} className="w-16 h-8 text-xs"
+                        type="number" min={1} max={100} className="w-16 h-8 text-xs"
                         value={sp.quantity}
                         onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0;
+                          const val = parseInt(e.target.value) || 1;
+                          const clamped = Math.min(100, Math.max(1, val));
                           setSelectedProducts((prev) =>
-                            prev.map((p) => (p.id === sp.id ? { ...p, quantity: val } : p))
+                            prev.map((p) => (p.id === sp.id ? { ...p, quantity: clamped } : p))
                           );
                         }}
                       />
@@ -576,14 +694,16 @@ export default function EtiquetasPage() {
                   ))
                 )}
               </CardContent>
-              <CardFooter className="flex flex-wrap gap-2">
-                <Button onClick={generatePDF} disabled={selectedProducts.length === 0 || generating} className="flex-1">
-                  {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
-                  Generar PDF
-                </Button>
-                <Button variant="outline" onClick={handlePrint} disabled={selectedProducts.length === 0}>
-                  <Printer className="mr-2 h-4 w-4" />Imprimir
-                </Button>
+              <CardFooter className="flex flex-col gap-2">
+                <div className="flex gap-2 w-full">
+                  <Button onClick={generatePDF} disabled={selectedProducts.length === 0 || generating} className="flex-1">
+                    {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+                    {generating ? "Generando..." : "Generar PDF"}
+                  </Button>
+                  <Button variant="outline" onClick={handlePrint} disabled={selectedProducts.length === 0}>
+                    <Printer className="mr-2 h-4 w-4" />Imprimir
+                  </Button>
+                </div>
               </CardFooter>
             </Card>
           </motion.div>
@@ -600,7 +720,7 @@ export default function EtiquetasPage() {
                   <Barcode className="h-5 w-5 text-primary" />Vista Previa
                 </CardTitle>
                 <CardDescription>
-                  {selectedTemplate.name} ({selectedTemplate.label}) - {selectedTemplate.columns}x{selectedTemplate.rows} por página
+                  {selectedTemplate.name} ({selectedTemplate.label}) - {PDF_LAYOUT[selectedTemplate.id]?.cols}x{PDF_LAYOUT[selectedTemplate.id]?.rows} por página
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -608,7 +728,7 @@ export default function EtiquetasPage() {
                   {selectedProducts.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                       <Barcode className="h-16 w-16 opacity-20" />
-                      <p className="mt-4">Seleccione productos para previsualizar</p>
+                      <p className="mt-4">Seleccione productos para previsualizar las etiquetas</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -622,13 +742,13 @@ export default function EtiquetasPage() {
                               className="flex flex-col items-center justify-center rounded border border-dashed border-gray-300 bg-gray-50"
                               style={{ width: canvasW, height: canvasH }}
                             >
-                              <span className="text-[8px] font-bold text-gray-700">{COMPANY_NAME}</span>
+                              <span className="text-[8px] font-bold text-gray-700">{companyNameState}</span>
                               <span className="text-[7px] text-gray-600 truncate max-w-full px-1 text-center">{sp.nombre}</span>
-                              <div className="my-0.5" style={{ width: canvasW * 0.85, height: canvasH * 0.35 }}>
+                              <div className="my-0.5" style={{ width: canvasW * 0.85, height: canvasH * 0.32 }}>
                                 <BarcodeGenerator
                                   value={barcodeVal}
                                   width={canvasW * 0.85}
-                                  height={canvasH * 0.35}
+                                  height={canvasH * 0.32}
                                   format="CODE128"
                                   displayValue={false}
                                 />
@@ -754,3 +874,4 @@ function generateCode128BarsToPDF(
 
   return bars;
 }
+
