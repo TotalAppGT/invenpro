@@ -1,0 +1,330 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  EMPRENDEDOR
+  NEGOCIO
+  CORPORATIVO
+}
+
+enum TenantStatus {
+  ACTIVO
+  SUSPENDIDO
+  CANCELADO
+  TRIAL
+}
+
+enum Rol {
+  ADMIN
+  SUPERVISOR
+  OPERADOR
+  CONSULTOR
+}
+
+enum UserStatus {
+  ACTIVO
+  INACTIVO
+}
+
+enum ProductoEstado {
+  ACTIVO
+  INACTIVO
+  DESCONTINUADO
+}
+
+enum MovimientoTipo {
+  ENTRADA
+  SALIDA
+  AJUSTE
+  TRASLADO
+  CONTEO_DIFERENCIA
+}
+
+enum ConteoEstado {
+  ABIERTO
+  EN_PROCESO
+  CERRADO
+  CONCILIADO
+}
+
+enum AlertaTipo {
+  STOCK_BAJO
+  VENCIMIENTO
+  MOVIMIENTO
+  PERSONALIZADA
+}
+
+enum AlertaCanal {
+  EMAIL
+  WHATSAPP
+  NOTIFICACION_APP
+}
+
+model Tenant {
+  id                       String       @id @default(cuid())
+  name                     String
+  slug                     String       @unique
+  plan                     Plan         @default(EMPRENDEDOR)
+  status                   TenantStatus @default(TRIAL)
+  config                   Json         @default("{}")
+  recurrenteCustomerId     String?
+  recurrenteSubscriptionId String?
+  trialEndsAt              DateTime?
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+
+  users      User[]
+  bodegas    Bodega[]
+  categorias Categoria[]
+  productos  Producto[]
+  proveedores Proveedor[]
+  movimientos Movimiento[]
+  conteos    Conteo[]
+  alertas    Alerta[]
+
+  @@index([slug])
+  @@index([recurrenteCustomerId])
+  @@index([recurrenteSubscriptionId])
+}
+
+model User {
+  id            String     @id @default(cuid())
+  firebaseUid   String?    @unique
+  email         String     @unique
+  passwordHash  String?
+  nombre        String
+  rol           Rol        @default(OPERADOR)
+  estado        UserStatus @default(ACTIVO)
+  tenantId      String
+  ultimoAcceso  DateTime?
+  foto          String?
+  telefono      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movimientos Movimiento[]
+  conteos    Conteo[]
+
+  @@index([tenantId])
+  @@index([email])
+}
+
+model Bodega {
+  id         String   @id @default(cuid())
+  nombre     String
+  direccion  String?
+  telefono   String?
+  encargado  String?
+  activa     Boolean  @default(true)
+  tenantId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventarios Inventario[]
+  movimientosOrigen Movimiento[]  @relation("BodegaOrigen")
+  movimientosDestino Movimiento[] @relation("BodegaDestino")
+  conteos    Conteo[]
+
+  @@index([tenantId])
+}
+
+model Categoria {
+  id          String   @id @default(cuid())
+  nombre      String
+  descripcion String?
+  tenantId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productos Producto[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+}
+
+model Producto {
+  id            String         @id @default(cuid())
+  codigo        String
+  nombre        String
+  descripcion   String?
+  categoriaId   String
+  unidadMedida  String         @default("UNIDAD")
+  costoUnit     Decimal        @default(0) @db.Decimal(12, 4)
+  precioUnit    Decimal        @default(0) @db.Decimal(12, 4)
+  stockMin      Int            @default(0)
+  stockMax      Int            @default(0)
+  codigoBarras  String?        @unique
+  sku           String?
+  imagen        String?
+  proveedorId   String?
+  estado        ProductoEstado @default(ACTIVO)
+  tenantId      String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoria    Categoria    @relation(fields: [categoriaId], references: [id])
+  proveedor    Proveedor?   @relation(fields: [proveedorId], references: [id])
+  inventarios  Inventario[]
+  movimientos  Movimiento[]
+  alertas      Alerta[]
+  conteoItems  ConteoItem[]
+
+  @@index([tenantId])
+  @@index([categoriaId])
+  @@index([proveedorId])
+  @@index([codigo])
+  @@index([sku])
+  @@index([codigoBarras])
+}
+
+model Proveedor {
+  id         String   @id @default(cuid())
+  nombre     String
+  nit        String?
+  direccion  String?
+  telefono   String?
+  email      String?
+  contacto   String?
+  notas      String?
+  tenantId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productos Producto[]
+
+  @@index([tenantId])
+}
+
+model Inventario {
+  id                  String   @id @default(cuid())
+  bodegaId            String
+  productoId          String
+  cantidad            Int      @default(0)
+  lote                String   @default("")
+  fechaVencimiento    DateTime?
+  ultimaActualizacion DateTime @updatedAt
+
+  bodega   Bodega   @relation(fields: [bodegaId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@unique([bodegaId, productoId, lote])
+  @@index([bodegaId])
+  @@index([productoId])
+}
+
+model Movimiento {
+  id              String         @id @default(cuid())
+  tipo            MovimientoTipo
+  fecha           DateTime       @default(now())
+  cantidad        Int
+  cantAnterior    Int            @default(0)
+  cantNueva       Int            @default(0)
+  costoUnit       Decimal?       @db.Decimal(12, 4)
+  total           Decimal?       @db.Decimal(12, 4)
+  bodegaId        String
+  bodegaDestinoId String?
+  productoId      String
+  usuarioId       String
+  notas           String?
+  referencia      String?
+  documento       String?
+  tenantId        String
+  createdAt       DateTime       @default(now())
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bodega        Bodega    @relation("BodegaOrigen", fields: [bodegaId], references: [id])
+  bodegaDestino Bodega?   @relation("BodegaDestino", fields: [bodegaDestinoId], references: [id])
+  producto      Producto  @relation(fields: [productoId], references: [id])
+  usuario       User      @relation(fields: [usuarioId], references: [id])
+
+  @@index([tenantId])
+  @@index([productoId])
+  @@index([bodegaId])
+  @@index([fecha])
+  @@index([tipo])
+}
+
+model Conteo {
+  id          String       @id @default(cuid())
+  estado      ConteoEstado @default(ABIERTO)
+  bodegaId    String
+  usuarioId   String
+  tenantId    String
+  notas       String?
+  fechaInicio DateTime     @default(now())
+  fechaFin    DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bodega  Bodega       @relation(fields: [bodegaId], references: [id])
+  usuario User         @relation(fields: [usuarioId], references: [id])
+  items   ConteoItem[]
+
+  @@index([tenantId])
+  @@index([bodegaId])
+}
+
+model ConteoItem {
+  id              String @id @default(cuid())
+  conteoId        String
+  productoId      String
+  cantidadSistema Int    @default(0)
+  cantidadFisica  Int    @default(0)
+  diferencia      Int    @default(0)
+  notas           String?
+
+  conteo   Conteo   @relation(fields: [conteoId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@index([conteoId])
+  @@index([productoId])
+}
+
+model Alerta {
+  id            String       @id @default(cuid())
+  tipo          AlertaTipo
+  mensaje       String
+  productoId    String?
+  destinatarios String[]
+  canal         AlertaCanal[]
+  programacion  String?
+  activa        Boolean      @default(true)
+  tenantId      String
+  ultimoEnvio   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  producto Producto? @relation(fields: [productoId], references: [id])
+
+  @@index([tenantId])
+  @@index([activa])
+  @@index([tipo])
+}
+
+model SubscriptionPlan {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  recurrentePlanId String   @unique
+  maxUsers         Int
+  maxBodegas       Int
+  maxProductos     Int
+  maxMovimientos   Int
+  features         Json     @default("[]")
+  priceMonthly     Decimal  @db.Decimal(10, 2)
+  priceYearly      Decimal  @db.Decimal(10, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

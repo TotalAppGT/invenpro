@@ -1,0 +1,450 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 210 40% 98%;
+    --card: 240 15% 8%;
+    --card-foreground: 210 40% 98%;
+    --popover: 240 15% 8%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 15% 15%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 240 15% 15%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 240 15% 15%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 240 15% 20%;
+    --input: 240 15% 20%;
+    --ring: 239 84% 67%;
+    --radius: 0.75rem;
+  }
+
+  .light {
+    --background: 240 10% 97%;
+    --foreground: 240 10% 10%;
+    --card: 240 10% 100%;
+    --card-foreground: 240 10% 10%;
+    --popover: 240 10% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 239 84% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 10% 92%;
+    --secondary-foreground: 240 10% 10%;
+    --muted: 240 10% 92%;
+    --muted-foreground: 240 5% 45%;
+    --accent: 239 84% 95%;
+    --accent-foreground: 239 84% 40%;
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 10% 85%;
+    --input: 240 10% 85%;
+    --ring: 239 84% 60%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(240 15% 25%);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(240 15% 35%);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(240 15% 25%) transparent;
+}
+
+::selection {
+  background-color: hsl(239 84% 67% / 0.3);
+  color: hsl(210 40% 98%);
+}
+
+@keyframes cosmic-glow {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes cosmic-float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  25% {
+    transform: translateY(-20px) translateX(10px);
+  }
+  50% {
+    transform: translateY(-10px) translateX(-10px);
+  }
+  75% {
+    transform: translateY(-30px) translateX(5px);
+  }
+}
+
+@keyframes cosmic-float-reverse {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  25% {
+    transform: translateY(20px) translateX(-10px);
+  }
+  50% {
+    transform: translateY(10px) translateX(10px);
+  }
+  75% {
+    transform: translateY(30px) translateX(-5px);
+  }
+}
+
+@keyframes cosmic-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes grid-move {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(60px);
+  }
+}
+
+@keyframes particle-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.4;
+  }
+  33% {
+    transform: translate(30px, -40px) scale(1.5);
+    opacity: 0.8;
+  }
+  66% {
+    transform: translate(-20px, -20px) scale(0.8);
+    opacity: 0.3;
+  }
+}
+
+@keyframes particle-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+  33% {
+    transform: translate(-25px, -35px) scale(1.4);
+    opacity: 0.7;
+  }
+  66% {
+    transform: translate(15px, -15px) scale(0.9);
+    opacity: 0.5;
+  }
+}
+
+@keyframes particle-3 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translate(-30px, -50px) scale(1.6);
+    opacity: 0.9;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes border-glow {
+  0%,
+  100% {
+    border-color: hsl(239 84% 67% / 0.3);
+  }
+  50% {
+    border-color: hsl(239 84% 67% / 0.8);
+  }
+}
+
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .cosmic-glow {
+    animation: cosmic-glow 4s ease-in-out infinite;
+  }
+  .cosmic-float {
+    animation: cosmic-float 8s ease-in-out infinite;
+  }
+  .cosmic-float-reverse {
+    animation: cosmic-float-reverse 10s ease-in-out infinite;
+  }
+  .cosmic-spin {
+    animation: cosmic-spin 30s linear infinite;
+  }
+  .text-gradient {
+    background: linear-gradient(
+      135deg,
+      hsl(239 84% 67%) 0%,
+      hsl(271 91% 65%) 50%,
+      hsl(316 70% 60%) 100%
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .text-gradient-hero {
+    background: linear-gradient(
+      135deg,
+      hsl(239 84% 75%) 0%,
+      hsl(271 91% 70%) 30%,
+      hsl(316 70% 65%) 60%,
+      hsl(239 84% 75%) 100%
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .glass {
+    background: hsl(240 15% 8% / 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid hsl(240 15% 20% / 0.5);
+  }
+  .glass-light {
+    background: hsl(240 10% 100% / 0.7);
+    backdrop-filter: blur(20px);
+    border: 1px solid hsl(240 10% 85% / 0.5);
+  }
+  .glow-border {
+    box-shadow:
+      0 0 20px hsl(239 84% 67% / 0.1),
+      inset 0 0 20px hsl(239 84% 67% / 0.05);
+    border-color: hsl(239 84% 67% / 0.2);
+  }
+  .glow-text {
+    text-shadow: 0 0 40px hsl(239 84% 67% / 0.5);
+  }
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(239 84% 67% / 0.1) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 3s ease-in-out infinite;
+  }
+}
+
+.cosmic-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.cosmic-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 80% at 20% 20%, hsl(239 84% 67% / 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 60% at 80% 80%, hsl(271 91% 65% / 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 50% at 50% 50%, hsl(316 70% 60% / 0.04) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cosmic-grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+      hsl(239 84% 67% / 0.03) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      hsl(239 84% 67% / 0.03) 1px,
+      transparent 1px
+    );
+  background-size: 60px 60px;
+  animation: grid-move 20s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cosmic-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cosmic-orb-1 {
+  width: 400px;
+  height: 400px;
+  background: hsl(239 84% 67% / 0.12);
+  top: -100px;
+  left: -100px;
+  animation: cosmic-glow 6s ease-in-out infinite;
+}
+
+.cosmic-orb-2 {
+  width: 350px;
+  height: 350px;
+  background: hsl(271 91% 65% / 0.1);
+  bottom: -100px;
+  right: -100px;
+  animation: cosmic-glow 8s ease-in-out infinite 2s;
+}
+
+.cosmic-orb-3 {
+  width: 250px;
+  height: 250px;
+  background: hsl(316 70% 60% / 0.08);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: cosmic-glow 7s ease-in-out infinite 4s;
+}
+
+.cosmic-particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: hsl(239 84% 67%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cosmic-particle:nth-child(1) {
+  top: 10%;
+  left: 15%;
+  animation: particle-1 6s ease-in-out infinite;
+}
+.cosmic-particle:nth-child(2) {
+  top: 25%;
+  left: 75%;
+  animation: particle-2 8s ease-in-out infinite 1s;
+}
+.cosmic-particle:nth-child(3) {
+  top: 70%;
+  left: 20%;
+  animation: particle-3 7s ease-in-out infinite 2s;
+}
+.cosmic-particle:nth-child(4) {
+  top: 40%;
+  left: 85%;
+  animation: particle-1 9s ease-in-out infinite 3s;
+}
+.cosmic-particle:nth-child(5) {
+  top: 80%;
+  left: 60%;
+  animation: particle-2 6.5s ease-in-out infinite 4s;
+}
+.cosmic-particle:nth-child(6) {
+  top: 15%;
+  left: 50%;
+  animation: particle-3 8.5s ease-in-out infinite 1.5s;
+}
+.cosmic-particle:nth-child(7) {
+  top: 55%;
+  left: 10%;
+  animation: particle-1 7.5s ease-in-out infinite 2.5s;
+}
+.cosmic-particle:nth-child(8) {
+  top: 90%;
+  left: 35%;
+  animation: particle-2 9.5s ease-in-out infinite 3.5s;
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .cosmic-bg,
+  .cosmic-grid,
+  .cosmic-orb,
+  .cosmic-particle {
+    display: none !important;
+  }
+  .glass {
+    background: white !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+  }
+}
