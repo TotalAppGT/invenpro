@@ -25,6 +25,7 @@ const API_PUBLIC_PREFIXES = [
   "/api/auth/logout",
   "/api/health",
   "/api/tenant/check-slug",
+  "/api/whatsapp/webhook",
 ];
 
 const PROTECTED_PREFIXES = [
