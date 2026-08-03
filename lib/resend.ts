@@ -1,6 +1,27 @@
 import { Resend } from "resend";
 
-export const resend = new Resend(process.env.RESEND_API_KEY!);
+let _resend: Resend | null = null;
+
+function getResend(): Resend | null {
+  if (!process.env.RESEND_API_KEY) return null;
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+}
+
+async function sendEmail(params: {
+  to: string | string[];
+  subject: string;
+  html: string;
+}) {
+  const client = getResend();
+  if (!client) {
+    console.warn("RESEND_API_KEY not configured, skipping email");
+    return { data: null, error: null };
+  }
+  return client.emails.send({ ...params, from: FROM_EMAIL });
+}
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "InvenPro <noreply@invenpro.app>";
 
@@ -15,8 +36,8 @@ export async function sendWelcomeEmail({
   tenantName: string;
   loginUrl: string;
 }) {
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    
     to,
     subject: `¡Bienvenido a InvenPro, ${nombre}!`,
     html: `
@@ -71,8 +92,8 @@ export async function sendStockAlertEmail({
   almacen: string;
   url: string;
 }) {
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    
     to,
     subject: `⚠️ Stock Bajo: ${productName} - ${currentStock} unidades`,
     html: `
@@ -135,8 +156,8 @@ export async function sendSubscriptionEmail({
     trial_ending: "Período de Prueba por Finalizar",
   };
 
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    
     to,
     subject: `InvenPro - ${subjects[action] ?? "Notificación de Suscripción"}`,
     html: `
@@ -171,8 +192,8 @@ export async function sendPasswordResetEmail({
   nombre: string;
   resetUrl: string;
 }) {
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    
     to,
     subject: "InvenPro - Restablecer Contraseña",
     html: `
@@ -218,8 +239,8 @@ export async function sendInvitationEmail({
   invitedBy: string;
   acceptUrl: string;
 }) {
-  return resend.emails.send({
-    from: FROM_EMAIL,
+  return sendEmail({
+    
     to,
     subject: `${invitedBy} te ha invitado a ${tenantName} en InvenPro`,
     html: `
