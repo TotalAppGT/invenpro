@@ -1,16 +1,19 @@
 /**
  * WhatsApp Cloud API Integration
- * Plantilla: notificacion_sistema_ia (es_MX, 2 params: nombre + mensaje)
+ * Plantilla: totalappgt_aviso (es_MX, UTILITY)
+ * Parámetros: sistema + mensaje
  *
  * Environment variables:
- *   WHATSAPP_PHONE_ID     - Phone Number ID from Meta
- *   WHATSAPP_TOKEN        - Permanent access token
- *   WHATSAPP_VERIFY_TOKEN - Webhook verification token
- *   WHATSAPP_TEMPLATE_NAME - Template name (default: notificacion_sistema_ia)
+ *   WHATSAPP_PHONE_ID      - Phone Number ID from Meta
+ *   WHATSAPP_TOKEN         - Permanent access token
+ *   WHATSAPP_VERIFY_TOKEN  - Webhook verification token
+ *   WHATSAPP_TEMPLATE_NAME - Template name (default: totalappgt_aviso)
  */
 
 const WHATSAPP_API_BASE = "https://graph.facebook.com/v22.0";
-const DEFAULT_TEMPLATE = process.env.WHATSAPP_TEMPLATE_NAME || "notificacion_sistema_ia";
+const TEMPLATE_NOMBRE = process.env.WHATSAPP_TEMPLATE_NAME || "totalappgt_aviso";
+const TEMPLATE_LANG = "es_MX";
+const SISTEMA_NOMBRE = "InvenPro";
 
 let requestCount = 0;
 let requestWindowStart = Date.now();
@@ -33,10 +36,7 @@ export function getVerifyToken(): string {
 }
 
 export function normalizePhone(phone: string): string {
-  let cleaned = phone.replace(/[^\d+]/g, "");
-  if (cleaned.startsWith("00")) cleaned = "+" + cleaned.slice(2);
-  if (!cleaned.startsWith("+")) cleaned = "+" + cleaned;
-  return cleaned;
+  return phone.replace(/\D/g, "");
 }
 
 async function rateLimitedRequest(): Promise<void> {
@@ -61,79 +61,91 @@ export interface WhatsAppMessageResult {
   statusCode?: number;
 }
 
-function logMessage(phone: string, template: string, params: string[], result: WhatsAppMessageResult): void {
+function logMessage(phone: string, sistema: string, mensaje: string, result: WhatsAppMessageResult): void {
   const timestamp = new Date().toISOString();
   const status = result.success ? "SUCCESS" : "FAILED";
   console.log(
-    `[WhatsApp ${timestamp}] ${status} | To: ${phone} | Template: ${template} | Params: [${params.join(", ")}] | ID: ${result.messageId || "N/A"} | Error: ${result.error || "N/A"}`
+    `[WhatsApp ${timestamp}] ${status} | To: ${phone} | Sistema: ${sistema} | Msg: ${mensaje.substring(0, 80)} | ID: ${result.messageId || "N/A"} | Error: ${result.error || "N/A"}`
   );
 }
 
-export async function sendWhatsAppMessage(
-  phoneNumber: string,
-  templateName: string,
-  params: string[]
+async function postWhatsApp(payload: Record<string, unknown>) {
+  const phoneId = getPhoneId();
+  const token = getToken();
+  const url = `${WHATSAPP_API_BASE}/${phoneId}/messages`;
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function enviarPlantillaAlerta(
+  telefono: string,
+  sistema: string,
+  mensaje: string
 ): Promise<WhatsAppMessageResult> {
   try {
-    const phoneId = getPhoneId();
-    const token = getToken();
-    const normalizedPhone = normalizePhone(phoneNumber);
-
-    const components: { type: string; parameters: { type: string; text: string }[] }[] = [];
-    if (params.length > 0) {
-      components.push({
-        type: "body",
-        parameters: params.map((p) => ({ type: "text", text: p })),
-      });
-    }
-
     await rateLimitedRequest();
 
-    const response = await fetch(`${WHATSAPP_API_BASE}/${phoneId}/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const res = await postWhatsApp({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: normalizePhone(telefono),
+      type: "template",
+      template: {
+        name: TEMPLATE_NOMBRE,
+        language: { code: TEMPLATE_LANG },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", parameter_name: "sistema", text: sistema },
+              { type: "text", parameter_name: "mensaje", text: mensaje },
+            ],
+          },
+        ],
       },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: normalizedPhone,
-        type: "template",
-        template: {
-          name: templateName,
-          language: { code: "es_MX" },
-          components: components.length > 0 ? components : undefined,
-        },
-      }),
     });
 
-    const data = await response.json();
+    const data = await res.json();
     const result: WhatsAppMessageResult = {
-      success: response.ok,
-      statusCode: response.status,
+      success: res.ok,
+      statusCode: res.status,
     };
 
-    if (response.ok && data.messages?.[0]?.id) {
+    if (res.ok && data.messages?.[0]?.id) {
       result.messageId = data.messages[0].id;
     }
-    if (!response.ok) {
-      result.error = data.error?.message || `HTTP ${response.status}`;
+    if (!res.ok) {
+      result.error = data.error?.message || `HTTP ${res.status}`;
     }
 
-    logMessage(normalizedPhone, templateName, params, result);
+    logMessage(telefono, sistema, mensaje, result);
     return result;
   } catch (err) {
     const result: WhatsAppMessageResult = {
       success: false,
       error: err instanceof Error ? err.message : "Error al enviar WhatsApp",
     };
-    logMessage(phoneNumber, templateName, params, result);
+    logMessage(telefono, SISTEMA_NOMBRE, mensaje, result);
     return result;
   }
 }
 
 // ─── Helpers usando la plantilla real ───
+
+export async function sendWhatsAppMessage(
+  phone: string,
+  _template: string,
+  params: string[]
+): Promise<WhatsAppMessageResult> {
+  const mensaje = params.length >= 2 ? params[1] : params[0] || "";
+  return enviarPlantillaAlerta(phone, SISTEMA_NOMBRE, mensaje);
+}
 
 export async function sendStockAlert(
   phone: string,
@@ -141,8 +153,8 @@ export async function sendStockAlert(
   cantidad: number,
   bodega: string
 ): Promise<WhatsAppMessageResult> {
-  const mensaje = `ALERTA: ${producto} tiene solo ${cantidad} unidades en ${bodega}. Reabastecer.`;
-  return sendWhatsAppMessage(phone, DEFAULT_TEMPLATE, [producto, mensaje]);
+  const mensaje = `ALERTA STOCK BAJO: ${producto} tiene solo ${cantidad} unidades en ${bodega}. Reabastecer.`;
+  return enviarPlantillaAlerta(phone, SISTEMA_NOMBRE, mensaje);
 }
 
 export async function sendAlertaVencimiento(
@@ -150,15 +162,15 @@ export async function sendAlertaVencimiento(
   producto: string,
   fecha: string
 ): Promise<WhatsAppMessageResult> {
-  const mensaje = `El producto ${producto} vence el ${fecha}. Revisar inventario.`;
-  return sendWhatsAppMessage(phone, DEFAULT_TEMPLATE, [producto, mensaje]);
+  const mensaje = `VENCIMIENTO: El producto ${producto} vence el ${fecha}. Revisar inventario.`;
+  return enviarPlantillaAlerta(phone, SISTEMA_NOMBRE, mensaje);
 }
 
 export async function sendNotification(
   phone: string,
   mensaje: string
 ): Promise<WhatsAppMessageResult> {
-  return sendWhatsAppMessage(phone, DEFAULT_TEMPLATE, ["InvenPro", mensaje]);
+  return enviarPlantillaAlerta(phone, SISTEMA_NOMBRE, mensaje);
 }
 
-export { getPhoneId, getToken, DEFAULT_TEMPLATE };
+export { getPhoneId, getToken, SISTEMA_NOMBRE, TEMPLATE_NOMBRE };
