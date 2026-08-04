@@ -66,8 +66,8 @@ async function main() {
         "Soporte por email",
         "Exportar CSV",
       ],
-      priceMonthly: 199.00,
-      priceYearly: 1990.00,
+      priceMonthly: 149.00,
+      priceYearly: 1490.00,
     },
   });
 
@@ -493,7 +493,7 @@ async function main() {
   console.log("  SEED COMPLETADO EXITOSAMENTE");
   console.log("==============================================");
   console.log("  Tenants: 2 (admin-central + demo)");
-  console.log("  Planes: 3 (EMPRENDEDOR Q199.00/Q1990.00, NEGOCIO Q449/Q3490.00, CORPORATIVO Q999/Q7990.00)");
+  console.log("  Planes: 3 (EMPRENDEDOR Q149.00/Q1490.00, NEGOCIO Q449/Q3490.00, CORPORATIVO Q999/Q7990.00)");
   console.log("  Usuarios: 2 (Super Admin + Demo)");
   console.log("  Bodegas: 2 (Principal + Transito)");
   console.log("  Categorias: 3 (Tecnologia, Oficina, Mobiliario)");

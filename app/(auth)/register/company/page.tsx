@@ -24,7 +24,7 @@ const plans = [
   {
     value: "EMPRENDEDOR",
     name: "Emprendedor",
-    price: "Q199",
+    price: "Q149",
     period: "/mes",
     desc: "Perfecto para pequeños negocios",
     features: ["3 usuarios", "2 bodegas", "500 productos", "14 días prueba"],

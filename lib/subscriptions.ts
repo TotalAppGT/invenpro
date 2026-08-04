@@ -92,8 +92,8 @@ export const PLAN_LIMITS: Record<
 
 export const PLAN_PRICES: Record<Plan, { monthly: number; yearly: number }> = {
   EMPRENDEDOR: {
-    monthly: 199.00,
-    yearly: 1990.00,
+    monthly: 149.00,
+    yearly: 1490.00,
   },
   NEGOCIO: {
     monthly: 449,

@@ -18,7 +18,7 @@ export function createRecurrenteClient(): RecurrenteClient {
 export const recurrente = createRecurrenteClient();
 
 const PLAN_AMOUNTS: Record<Plan, { monthly: number; yearly: number }> = {
-  EMPRENDEDOR: { monthly: 19900, yearly: 199000 },
+  EMPRENDEDOR: { monthly: 14900, yearly: 199000 },
   NEGOCIO: { monthly: 34900, yearly: 349000 },
   CORPORATIVO: { monthly: 79900, yearly: 799000 },
 };
