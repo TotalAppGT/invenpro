@@ -123,6 +123,15 @@ export const productoSchema = z.object({
   sku: z.string().max(50).optional().nullable(),
   imagen: z.string().optional().nullable(),
   proveedorId: z.string().optional().nullable(),
+  permiteLotes: z.boolean().optional().default(false),
+  permiteSeries: z.boolean().optional().default(false),
+  puntoReorden: z.number().int().min(0).optional().default(0),
+  stockSeguridad: z.number().int().min(0).optional().default(0),
+  leadTimeDias: z.number().int().min(0).optional().default(0),
+  clasificacion: z.enum(["A", "B", "C"]).optional().nullable(),
+  costoEstandar: z.number().min(0).optional().nullable(),
+  costoFlete: z.number().min(0).optional().default(0),
+  costoImportacion: z.number().min(0).optional().default(0),
   estado: z
     .enum(["ACTIVO", "INACTIVO", "DESCONTINUADO"])
     .optional()
@@ -293,6 +302,126 @@ export const searchSchema = z.object({
   limit: z.number().int().min(1).max(100).optional().default(20),
   offset: z.number().int().min(0).optional().default(0),
 });
+
+// ==========================================================================
+// NÚCLEO DE INVENTARIO PRO
+// ==========================================================================
+
+export const ubicacionSchema = z.object({
+  codigo: z.string().min(1, "El código es obligatorio").max(50),
+  nombre: z.string().min(1, "El nombre es obligatorio").max(150),
+  tipo: z.enum(["ZONA", "PASILLO", "RACK", "ESTANTE", "NIVEL", "POSICION", "PISO"]).default("POSICION"),
+  pasillo: z.string().max(50).optional().nullable(),
+  rack: z.string().max(50).optional().nullable(),
+  nivel: z.string().max(50).optional().nullable(),
+  posicion: z.string().max(50).optional().nullable(),
+  capacidad: z.number().int().min(0).optional().default(0),
+  activa: z.boolean().optional().default(true),
+  bodegaId: z.string().min(1, "La bodega es obligatoria"),
+});
+
+export const productoUnidadSchema = z.object({
+  nombre: z.string().min(1, "El nombre es obligatorio").max(60),
+  abreviatura: z.string().min(1, "La abreviatura es obligatoria").max(15),
+  factor: z.number().positive("El factor debe ser mayor a 0"),
+  codigoBarras: z.string().max(60).optional().nullable(),
+  esBase: z.boolean().optional().default(false),
+});
+
+export const productoUnidadesSchema = z.object({
+  unidades: z.array(productoUnidadSchema).min(1, "Debe incluir al menos una unidad"),
+});
+
+export const listaPrecioSchema = z.object({
+  nombre: z.string().min(1, "El nombre es obligatorio").max(100),
+  tipo: z.enum(["BASE", "MAYOREO", "MENUDEO", "CLIENTE", "ESPECIAL"]).default("BASE"),
+  moneda: z.string().max(5).default("GTQ"),
+  margen: z.number().min(0).optional().default(0),
+  esDefecto: z.boolean().optional().default(false),
+  activa: z.boolean().optional().default(true),
+});
+
+export const productoPreciosSchema = z.object({
+  precios: z.array(
+    z.object({
+      listaPrecioId: z.string().min(1),
+      precio: z.number().min(0),
+      descuentoMax: z.number().min(0).max(100).optional().default(0),
+    })
+  ),
+});
+
+export const numeroSerieSchema = z.object({
+  serie: z.string().min(1, "El número de serie es obligatorio").max(100),
+  productoId: z.string().min(1),
+  bodegaId: z.string().min(1),
+  ubicacionId: z.string().optional().nullable(),
+  lote: z.string().max(60).optional().nullable(),
+  estado: z.enum(["DISPONIBLE", "RESERVADO", "VENDIDO", "BAJA"]).optional().default("DISPONIBLE"),
+  costoUnit: z.number().min(0).optional().nullable(),
+  fechaVencimiento: z.string().optional().nullable(),
+  notas: z.string().max(300).optional().nullable(),
+});
+
+export const devolucionSchema = z.object({
+  tipo: z.enum(["CLIENTE", "PROVEEDOR"]),
+  motivo: z.string().min(1, "El motivo es obligatorio").max(300),
+  observacion: z.string().max(500).optional().nullable(),
+  bodegaId: z.string().min(1, "La bodega es obligatoria"),
+  clienteId: z.string().optional().nullable(),
+  proveedorId: z.string().optional().nullable(),
+  items: z
+    .array(
+      z.object({
+        productoId: z.string().min(1),
+        cantidad: z.number().int().min(1),
+        costoUnit: z.number().min(0).optional().default(0),
+        precioUnit: z.number().min(0).optional().default(0),
+        lote: z.string().max(60).optional().nullable(),
+        reingresa: z.boolean().optional().default(true),
+      })
+    )
+    .min(1, "Debe incluir al menos un item"),
+});
+
+export const ajusteSchema = z.object({
+  motivo: z.string().min(1, "El motivo es obligatorio").max(300),
+  observacion: z.string().max(500).optional().nullable(),
+  bodegaId: z.string().min(1, "La bodega es obligatoria"),
+  items: z
+    .array(
+      z.object({
+        productoId: z.string().min(1),
+        cantidadSistema: z.number().int().min(0),
+        cantidadFisica: z.number().int().min(0),
+        costoUnit: z.number().min(0).optional().default(0),
+        lote: z.string().max(60).optional().nullable(),
+      })
+    )
+    .min(1, "Debe incluir al menos un item"),
+});
+
+export const clienteSchema = z.object({
+  nombre: z.string().min(1, "El nombre es obligatorio").max(150),
+  nit: z.string().max(20).optional().nullable(),
+  direccion: z.string().max(200).optional().nullable(),
+  telefono: z.string().max(20).optional().nullable(),
+  email: z.string().email("Correo inválido").optional().nullable().or(z.literal("")),
+  contacto: z.string().max(100).optional().nullable(),
+  listaPrecioId: z.string().optional().nullable(),
+  limiteCredito: z.number().min(0).optional().default(0),
+  diasCredito: z.number().int().min(0).optional().default(0),
+  activo: z.boolean().optional().default(true),
+  notas: z.string().max(500).optional().nullable(),
+});
+
+export type UbicacionInput = z.infer<typeof ubicacionSchema>;
+export type ProductoUnidadInput = z.infer<typeof productoUnidadSchema>;
+export type ListaPrecioInput = z.infer<typeof listaPrecioSchema>;
+export type NumeroSerieInput = z.infer<typeof numeroSerieSchema>;
+export type DevolucionInput = z.infer<typeof devolucionSchema>;
+export type AjusteInput = z.infer<typeof ajusteSchema>;
+export type ClienteInput = z.infer<typeof clienteSchema>;
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;

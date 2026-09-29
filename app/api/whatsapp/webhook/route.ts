@@ -44,17 +44,18 @@ interface WhatsAppStatusChange {
   value: WhatsAppChangeValue;
 }
 
-function log(name: string, data: unknown): void {
-  const timestamp = new Date().toISOString();
-  console.log(`=== [WhatsApp Webhook ${timestamp}] ${name} ===`);
+type LogLevel = "debug" | "info" | "warn" | "error";
+const LEVELS: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
+const CURRENT_LEVEL: LogLevel = (process.env.LOG_LEVEL as LogLevel) || "warn";
 
-  try {
-    console.log(JSON.stringify(data, null, 2));
-  } catch {
-    console.log(String(data));
+function log(level: LogLevel, message: string, data?: unknown): void {
+  if (LEVELS[level] < LEVELS[CURRENT_LEVEL]) return;
+  const line = `[whatsapp-webhook] ${level.toUpperCase()} ${message}`;
+  if (data === undefined) {
+    console.log(line);
+  } else {
+    console.log(line, typeof data === "string" ? data : JSON.stringify(data));
   }
-
-  console.log("=" .repeat(80));
 }
 
 export async function GET(request: NextRequest) {
@@ -66,17 +67,15 @@ export async function GET(request: NextRequest) {
 
     const verifyToken = getVerifyToken();
 
-    log("WEBHOOK_VERIFICATION", { mode, token, verifyToken });
-
     if (mode === "subscribe" && token === verifyToken) {
-      log("WEBHOOK_VERIFIED", "Webhook verified successfully");
+      log("info", "verificación correcta");
       return new NextResponse(challenge, { status: 200 });
     }
 
-    log("WEBHOOK_VERIFICATION_FAILED", { reason: "Token mismatch or invalid mode" });
+    log("warn", "verificación fallida", { mode });
     return new NextResponse("Verification failed", { status: 403 });
   } catch (error) {
-    log("WEBHOOK_VERIFICATION_ERROR", error);
+    log("error", "error en verificación", error instanceof Error ? error.message : String(error));
     return new NextResponse("Internal server error", { status: 500 });
   }
 }
@@ -85,10 +84,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    log("INCOMING_WEBHOOK", body);
-
     if (body.object !== "whatsapp_business_account") {
-      log("UNKNOWN_OBJECT", { object: body.object });
+      log("debug", "objeto desconocido", { object: body.object });
       return NextResponse.json({ success: true }, { status: 200 });
     }
 
@@ -109,42 +106,27 @@ export async function POST(request: NextRequest) {
               type: msg.type,
               text: msg.text,
             };
-
-            log("INCOMING_MESSAGE", {
+            log("info", "mensaje entrante", {
               phoneNumberId: value.metadata?.phone_number_id,
-              contact: value.contacts?.[0],
+              contact: value.contacts?.[0]?.wa_id,
               message: messageData,
             });
-
-            if (msg.text?.body) {
-              log("MESSAGE_BODY", {
-                from: msg.from,
-                body: msg.text.body,
-                type: msg.type,
-              });
-            }
           }
         }
 
+        // Los estados de entrega son de altísimo volumen: solo en debug.
         if (value.statuses && value.statuses.length > 0) {
-          for (const status of value.statuses) {
-            log("MESSAGE_STATUS", {
-              id: status.id,
-              status: status.status,
-              recipient: status.recipient_id,
-              timestamp: status.timestamp,
-            });
-          }
+          log("debug", "estados de entrega", {
+            count: value.statuses.length,
+            statuses: value.statuses.map((s) => ({ id: s.id, status: s.status })),
+          });
         }
       }
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    log("WEBHOOK_ERROR", error);
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
+    log("error", "error procesando webhook", error instanceof Error ? error.message : String(error));
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }

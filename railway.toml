@@ -4,13 +4,8 @@
 
 [deploy]
   startCommand = "npx prisma db push --accept-data-loss && npx prisma db seed && npm start"
+  healthcheckPath = "/api/health"
+  healthcheckTimeout = 30
   numReplicas = 1
   restartPolicyType = "ON_FAILURE"
   restartPolicyMaxRetries = 10
-
-[service]
-  healthcheckPath = "/api/health"
-  healthcheckTimeout = 10
-
-[variables]
-  NODE_ENV = "production"

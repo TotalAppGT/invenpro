@@ -13,6 +13,7 @@ import {
   ArrowLeftRight, BookOpen, CheckSquare, Barcode, Truck,
   BarChart3, Users, Settings, CreditCard, Bell, ShoppingCart,
   ChevronDown, ChevronRight, X, Boxes, TrendingUp,
+  MapPin, Hash, Tag, RotateCcw, ClipboardCheck, LineChart,
 } from "lucide-react";
 
 interface NavGroup {
@@ -74,7 +75,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       items: [
         { label: "Productos", href: "/productos", icon: <Package className="h-4 w-4" /> },
         { label: "Bodegas", href: "/bodegas", icon: <Warehouse className="h-4 w-4" /> },
+        { label: "Ubicaciones", href: "/ubicaciones", icon: <MapPin className="h-4 w-4" /> },
         { label: "Inventario", href: "/inventario", icon: <ClipboardList className="h-4 w-4" /> },
+        { label: "Numeros de Serie", href: "/series", icon: <Hash className="h-4 w-4" /> },
         { label: "Categorias", href: "/productos?tab=categorias", icon: <Tags className="h-4 w-4" /> },
       ],
     },
@@ -85,14 +88,19 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         { label: "Movimientos", href: "/movimientos", icon: <ArrowLeftRight className="h-4 w-4" /> },
         { label: "Kardex", href: "/kardex", icon: <BookOpen className="h-4 w-4" /> },
         { label: "Conteos", href: "/conteos", icon: <CheckSquare className="h-4 w-4" /> },
-        { label: "Etiquetas", href: "/etiquetas", icon: <Barcode className="h-4 w-4" /> },
+        { label: "Ajustes", href: "/ajustes", icon: <ClipboardCheck className="h-4 w-4" /> },
+        { label: "Devoluciones", href: "/devoluciones", icon: <RotateCcw className="h-4 w-4" /> },
+        { label: "Compras Sugeridas", href: "/compras-sugeridas", icon: <ShoppingCart className="h-4 w-4" /> },
         { label: "Ordenes de Compra", href: "/ordenes-compra", icon: <ShoppingCart className="h-4 w-4" /> },
+        { label: "Etiquetas", href: "/etiquetas", icon: <Barcode className="h-4 w-4" /> },
       ],
     },
     {
-      label: "PROVEEDORES",
-      icon: <Truck className="h-4 w-4" />,
+      label: "COMERCIAL",
+      icon: <Users className="h-4 w-4" />,
       items: [
+        { label: "Clientes", href: "/clientes", icon: <Users className="h-4 w-4" /> },
+        { label: "Listas de Precios", href: "/listas-precio", icon: <Tag className="h-4 w-4" /> },
         { label: "Proveedores", href: "/proveedores", icon: <Truck className="h-4 w-4" /> },
       ],
     },
@@ -101,6 +109,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       icon: <BarChart3 className="h-4 w-4" />,
       items: [
         { label: "Reportes", href: "/reportes", icon: <BarChart3 className="h-4 w-4" /> },
+        { label: "Inteligencia", href: "/reportes/inventario-pro", icon: <LineChart className="h-4 w-4" /> },
       ],
     },
     {

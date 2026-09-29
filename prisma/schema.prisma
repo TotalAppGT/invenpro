@@ -66,6 +66,121 @@ enum AlertaCanal {
   NOTIFICACION_APP
 }
 
+enum TipoUbicacion {
+  ZONA
+  PASILLO
+  RACK
+  ESTANTE
+  NIVEL
+  POSICION
+  PISO
+}
+
+enum ClasificacionABC {
+  A
+  B
+  C
+}
+
+enum SerieEstado {
+  DISPONIBLE
+  RESERVADO
+  VENDIDO
+  BAJA
+}
+
+enum AjusteEstado {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  EJECUTADO
+}
+
+enum DevolucionTipo {
+  CLIENTE
+  PROVEEDOR
+}
+
+enum DevolucionEstado {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  COMPLETADA
+}
+
+enum DocumentoEstado {
+  BORRADOR
+  CONFIRMADO
+  ANULADO
+}
+
+enum CajaEstado {
+  ABIERTA
+  CERRADA
+}
+
+enum EstadoCuenta {
+  PENDIENTE
+  PARCIAL
+  PAGADA
+  VENCIDA
+  ANULADA
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  CHEQUE
+  CREDITO
+  OTRO
+}
+
+enum MovimientoCajaTipo {
+  APERTURA
+  VENTA
+  INGRESO
+  EGRESO
+  RETIRO
+  DEVOLUCION
+  CIERRE
+}
+
+enum NotaTipo {
+  CREDITO
+  DEBITO
+}
+
+enum ListaPrecioTipo {
+  BASE
+  MAYOREO
+  MENUDEO
+  CLIENTE
+  ESPECIAL
+}
+
+enum CotizacionEstado {
+  BORRADOR
+  ENVIADA
+  ACEPTADA
+  RECHAZADA
+  VENCIDA
+  CONVERTIDA
+}
+
+enum VentaEstado {
+  BORRADOR
+  CONFIRMADA
+  ANULADA
+}
+
+enum VentaTipo {
+  POS
+  FACTURA
+  CREDITO
+  NOTA
+}
+
 model Tenant {
   id                       String       @id @default(cuid())
   name                     String
@@ -79,14 +194,28 @@ model Tenant {
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
-  users      User[]
-  bodegas    Bodega[]
-  categorias Categoria[]
-  productos  Producto[]
-  proveedores Proveedor[]
-  movimientos Movimiento[]
-  conteos    Conteo[]
-  alertas    Alerta[]
+  users            User[]
+  bodegas          Bodega[]
+  categorias       Categoria[]
+  productos        Producto[]
+  proveedores      Proveedor[]
+  movimientos      Movimiento[]
+  conteos          Conteo[]
+  alertas          Alerta[]
+  ubicaciones      Ubicacion[]
+  listasPrecio     ListaPrecio[]
+  series           NumeroSerie[]
+  clientes         Cliente[]
+  cotizaciones     Cotizacion[]
+  ventas           Venta[]
+  devoluciones     Devolucion[]
+  ajustes          AjusteInventario[]
+  cajas            Caja[]
+  pagos            Pago[]
+  notas            NotaCreditoDebito[]
+  cuentasPorCobrar CuentaPorCobrar[]
+  cuentasPorPagar  CuentaPorPagar[]
+  ordenesCompra    OrdenCompra[]
 
   @@index([slug])
   @@index([recurrenteCustomerId])
@@ -108,9 +237,17 @@ model User {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  movimientos Movimiento[]
-  conteos    Conteo[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movimientos       Movimiento[]
+  conteos           Conteo[]
+  ventas            Venta[]
+  cotizaciones      Cotizacion[]
+  devoluciones      Devolucion[]
+  cajas             Caja[]
+  ordenesCompra     OrdenCompra[]
+  notas             NotaCreditoDebito[]
+  ajustesSolicitados AjusteInventario[] @relation("AjusteSolicitante")
+  ajustesAprobados   AjusteInventario[] @relation("AjusteAprobador")
 
   @@index([tenantId])
   @@index([email])
@@ -127,11 +264,15 @@ model Bodega {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  inventarios Inventario[]
-  movimientosOrigen Movimiento[]  @relation("BodegaOrigen")
-  movimientosDestino Movimiento[] @relation("BodegaDestino")
-  conteos    Conteo[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventarios       Inventario[]
+  movimientosOrigen Movimiento[]       @relation("BodegaOrigen")
+  movimientosDestino Movimiento[]      @relation("BodegaDestino")
+  conteos           Conteo[]
+  ubicaciones       Ubicacion[]
+  series            NumeroSerie[]
+  devoluciones      Devolucion[]
+  ajustes           AjusteInventario[]
 
   @@index([tenantId])
 }
@@ -152,32 +293,50 @@ model Categoria {
 }
 
 model Producto {
-  id            String         @id @default(cuid())
-  codigo        String
-  nombre        String
-  descripcion   String?
-  categoriaId   String
-  unidadMedida  String         @default("UNIDAD")
-  costoUnit     Decimal        @default(0) @db.Decimal(12, 4)
-  precioUnit    Decimal        @default(0) @db.Decimal(12, 4)
-  stockMin      Int            @default(0)
-  stockMax      Int            @default(0)
-  codigoBarras  String?        @unique
-  sku           String?
-  imagen        String?
-  proveedorId   String?
-  estado        ProductoEstado @default(ACTIVO)
-  tenantId      String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  codigo         String
+  nombre         String
+  descripcion    String?
+  categoriaId    String
+  unidadMedida   String         @default("UNIDAD")
+  costoUnit      Decimal        @default(0) @db.Decimal(12, 4)
+  precioUnit     Decimal        @default(0) @db.Decimal(12, 4)
+  stockMin       Int            @default(0)
+  stockMax       Int            @default(0)
+  codigoBarras   String?        @unique
+  sku            String?
+  imagen         String?
+  proveedorId    String?
+  estado         ProductoEstado @default(ACTIVO)
+  tenantId       String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  categoria    Categoria    @relation(fields: [categoriaId], references: [id])
-  proveedor    Proveedor?   @relation(fields: [proveedorId], references: [id])
-  inventarios  Inventario[]
-  movimientos  Movimiento[]
-  alertas      Alerta[]
-  conteoItems  ConteoItem[]
+  permiteLotes   Boolean           @default(false)
+  permiteSeries  Boolean           @default(false)
+  puntoReorden   Int               @default(0)
+  stockSeguridad Int               @default(0)
+  leadTimeDias   Int               @default(0)
+  clasificacion  ClasificacionABC?
+  costoEstandar  Decimal?          @db.Decimal(12, 4)
+  costoFlete     Decimal           @default(0) @db.Decimal(12, 4)
+  costoImportacion Decimal         @default(0) @db.Decimal(12, 4)
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoria       Categoria         @relation(fields: [categoriaId], references: [id])
+  proveedor       Proveedor?        @relation(fields: [proveedorId], references: [id])
+  inventarios     Inventario[]
+  movimientos     Movimiento[]
+  alertas         Alerta[]
+  conteoItems     ConteoItem[]
+  unidades        ProductoUnidad[]
+  precios         ProductoPrecio[]
+  series          NumeroSerie[]
+  devolucionItems DevolucionItem[]
+  ajusteItems     AjusteItem[]
+  cotizacionItems CotizacionItem[]
+  ventaItems      VentaItem[]
+  ordenCompraItems OrdenCompraItem[]
 
   @@index([tenantId])
   @@index([categoriaId])
@@ -200,8 +359,11 @@ model Proveedor {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  productos Producto[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productos       Producto[]
+  devoluciones    Devolucion[]
+  cuentasPorPagar CuentaPorPagar[]
+  ordenesCompra   OrdenCompra[]
 
   @@index([tenantId])
 }
@@ -210,17 +372,20 @@ model Inventario {
   id                  String   @id @default(cuid())
   bodegaId            String
   productoId          String
+  ubicacionId         String?
   cantidad            Int      @default(0)
   lote                String   @default("")
   fechaVencimiento    DateTime?
   ultimaActualizacion DateTime @updatedAt
 
-  bodega   Bodega   @relation(fields: [bodegaId], references: [id])
-  producto Producto @relation(fields: [productoId], references: [id])
+  bodega   Bodega    @relation(fields: [bodegaId], references: [id])
+  producto Producto  @relation(fields: [productoId], references: [id])
+  ubicacion Ubicacion? @relation(fields: [ubicacionId], references: [id])
 
   @@unique([bodegaId, productoId, lote])
   @@index([bodegaId])
   @@index([productoId])
+  @@index([ubicacionId])
 }
 
 model Movimiento {
@@ -234,6 +399,7 @@ model Movimiento {
   total           Decimal?       @db.Decimal(12, 4)
   bodegaId        String
   bodegaDestinoId String?
+  ubicacionId     String?
   productoId      String
   usuarioId       String
   notas           String?
@@ -327,4 +493,497 @@ model SubscriptionPlan {
   priceYearly      Decimal  @db.Decimal(10, 2)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+// ==========================================================================
+// NÚCLEO DE INVENTARIO PRO
+// ==========================================================================
+
+model Ubicacion {
+  id        String        @id @default(cuid())
+  codigo    String
+  nombre    String
+  tipo      TipoUbicacion @default(POSICION)
+  pasillo   String?
+  rack      String?
+  nivel     String?
+  posicion  String?
+  capacidad Int           @default(0)
+  activa    Boolean       @default(true)
+  bodegaId  String
+  tenantId  String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  bodega     Bodega       @relation(fields: [bodegaId], references: [id], onDelete: Cascade)
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventarios Inventario[]
+  series     NumeroSerie[]
+
+  @@unique([bodegaId, codigo])
+  @@index([tenantId])
+  @@index([bodegaId])
+}
+
+model ProductoUnidad {
+  id          String   @id @default(cuid())
+  productoId  String
+  nombre      String
+  abreviatura String
+  factor      Decimal  @default(1) @db.Decimal(12, 4)
+  codigoBarras String?
+  esBase      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@index([productoId])
+}
+
+model ListaPrecio {
+  id        String          @id @default(cuid())
+  nombre    String
+  tipo      ListaPrecioTipo @default(BASE)
+  moneda    String          @default("GTQ")
+  margen    Decimal         @default(0) @db.Decimal(8, 2)
+  esDefecto Boolean         @default(false)
+  activa    Boolean         @default(true)
+  tenantId  String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  precios  ProductoPrecio[]
+  clientes Cliente[]
+
+  @@index([tenantId])
+}
+
+model ProductoPrecio {
+  id            String   @id @default(cuid())
+  productoId    String
+  listaPrecioId String
+  precio        Decimal  @default(0) @db.Decimal(12, 4)
+  descuentoMax  Decimal  @default(0) @db.Decimal(8, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  producto Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  lista    ListaPrecio @relation(fields: [listaPrecioId], references: [id], onDelete: Cascade)
+
+  @@unique([productoId, listaPrecioId])
+  @@index([productoId])
+  @@index([listaPrecioId])
+}
+
+model NumeroSerie {
+  id               String       @id @default(cuid())
+  serie            String
+  productoId       String
+  bodegaId         String
+  ubicacionId      String?
+  lote             String?
+  estado           SerieEstado  @default(DISPONIBLE)
+  costoUnit        Decimal?     @db.Decimal(12, 4)
+  fechaVencimiento DateTime?
+  notas            String?
+  tenantId         String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  producto  Producto   @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  bodega    Bodega     @relation(fields: [bodegaId], references: [id])
+  ubicacion Ubicacion? @relation(fields: [ubicacionId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, serie])
+  @@index([productoId])
+  @@index([bodegaId])
+  @@index([estado])
+}
+
+model Devolucion {
+  id          String           @id @default(cuid())
+  numero      String
+  tipo        DevolucionTipo
+  estado      DevolucionEstado @default(PENDIENTE)
+  motivo      String
+  observacion String?
+  total       Decimal          @default(0) @db.Decimal(12, 4)
+  bodegaId    String
+  clienteId   String?
+  proveedorId String?
+  usuarioId   String
+  aprobadorId String?
+  fecha       DateTime         @default(now())
+  tenantId    String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bodega    Bodega          @relation(fields: [bodegaId], references: [id])
+  cliente   Cliente?        @relation(fields: [clienteId], references: [id])
+  proveedor Proveedor?      @relation(fields: [proveedorId], references: [id])
+  usuario   User            @relation(fields: [usuarioId], references: [id])
+  items     DevolucionItem[]
+
+  @@index([tenantId])
+  @@index([tipo])
+  @@index([estado])
+}
+
+model DevolucionItem {
+  id           String   @id @default(cuid())
+  devolucionId String
+  productoId   String
+  cantidad     Int
+  costoUnit    Decimal  @default(0) @db.Decimal(12, 4)
+  precioUnit   Decimal  @default(0) @db.Decimal(12, 4)
+  lote         String?
+  reingresa    Boolean  @default(true)
+
+  devolucion Devolucion @relation(fields: [devolucionId], references: [id], onDelete: Cascade)
+  producto   Producto   @relation(fields: [productoId], references: [id])
+
+  @@index([devolucionId])
+  @@index([productoId])
+}
+
+model AjusteInventario {
+  id           String       @id @default(cuid())
+  numero       String
+  estado       AjusteEstado @default(PENDIENTE)
+  motivo       String
+  observacion  String?
+  bodegaId     String
+  solicitanteId String
+  aprobadorId  String?
+  fechaAprobacion DateTime?
+  tenantId     String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bodega      Bodega       @relation(fields: [bodegaId], references: [id])
+  solicitante User         @relation("AjusteSolicitante", fields: [solicitanteId], references: [id])
+  aprobador   User?        @relation("AjusteAprobador", fields: [aprobadorId], references: [id])
+  items       AjusteItem[]
+
+  @@index([tenantId])
+  @@index([estado])
+}
+
+model AjusteItem {
+  id              String  @id @default(cuid())
+  ajusteId        String
+  productoId      String
+  cantidadSistema Int     @default(0)
+  cantidadFisica  Int     @default(0)
+  diferencia      Int     @default(0)
+  costoUnit       Decimal @default(0) @db.Decimal(12, 4)
+  lote            String?
+
+  ajuste   AjusteInventario @relation(fields: [ajusteId], references: [id], onDelete: Cascade)
+  producto Producto         @relation(fields: [productoId], references: [id])
+
+  @@index([ajusteId])
+  @@index([productoId])
+}
+
+// ==========================================================================
+// CICLO COMERCIAL
+// ==========================================================================
+
+model Cliente {
+  id             String   @id @default(cuid())
+  nombre         String
+  nit            String?
+  direccion      String?
+  telefono       String?
+  email          String?
+  contacto       String?
+  listaPrecioId  String?
+  limiteCredito  Decimal  @default(0) @db.Decimal(12, 4)
+  diasCredito    Int      @default(0)
+  saldo          Decimal  @default(0) @db.Decimal(12, 4)
+  activo         Boolean  @default(true)
+  notas          String?
+  tenantId       String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  listaPrecio     ListaPrecio?      @relation(fields: [listaPrecioId], references: [id])
+  cotizaciones    Cotizacion[]
+  ventas          Venta[]
+  devoluciones    Devolucion[]
+  cuentasPorCobrar CuentaPorCobrar[]
+  pagos           Pago[]
+  notasCredito    NotaCreditoDebito[]
+
+  @@index([tenantId])
+  @@index([nit])
+}
+
+model Cotizacion {
+  id           String           @id @default(cuid())
+  numero       String
+  estado       CotizacionEstado @default(BORRADOR)
+  clienteId    String
+  usuarioId    String
+  subtotal     Decimal          @default(0) @db.Decimal(12, 4)
+  descuento    Decimal          @default(0) @db.Decimal(12, 4)
+  impuesto     Decimal          @default(0) @db.Decimal(12, 4)
+  total        Decimal          @default(0) @db.Decimal(12, 4)
+  validaHasta  DateTime?
+  notas        String?
+  tenantId     String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente          @relation(fields: [clienteId], references: [id])
+  usuario User             @relation(fields: [usuarioId], references: [id])
+  items   CotizacionItem[]
+  ventas  Venta[]
+
+  @@index([tenantId])
+  @@index([clienteId])
+  @@index([estado])
+}
+
+model CotizacionItem {
+  id            String  @id @default(cuid())
+  cotizacionId  String
+  productoId    String
+  descripcion   String?
+  cantidad      Int
+  precioUnit    Decimal @default(0) @db.Decimal(12, 4)
+  descuento     Decimal @default(0) @db.Decimal(8, 2)
+  subtotal      Decimal @default(0) @db.Decimal(12, 4)
+
+  cotizacion Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  producto   Producto   @relation(fields: [productoId], references: [id])
+
+  @@index([cotizacionId])
+  @@index([productoId])
+}
+
+model Venta {
+  id           String       @id @default(cuid())
+  numero       String
+  tipo         VentaTipo    @default(FACTURA)
+  estado       VentaEstado  @default(BORRADOR)
+  clienteId    String?
+  usuarioId    String
+  cajaId       String?
+  cotizacionId String?
+  subtotal     Decimal      @default(0) @db.Decimal(12, 4)
+  descuento    Decimal      @default(0) @db.Decimal(12, 4)
+  impuesto     Decimal      @default(0) @db.Decimal(12, 4)
+  total        Decimal      @default(0) @db.Decimal(12, 4)
+  pagado       Decimal      @default(0) @db.Decimal(12, 4)
+  saldo        Decimal      @default(0) @db.Decimal(12, 4)
+  notas        String?
+  fecha        DateTime     @default(now())
+  tenantId     String
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente   Cliente?          @relation(fields: [clienteId], references: [id])
+  usuario   User              @relation(fields: [usuarioId], references: [id])
+  caja      Caja?             @relation(fields: [cajaId], references: [id])
+  cotizacion Cotizacion?      @relation(fields: [cotizacionId], references: [id])
+  items     VentaItem[]
+  pagos     Pago[]
+  cuentasPorCobrar CuentaPorCobrar[]
+  notasCredito     NotaCreditoDebito[]
+
+  @@index([tenantId])
+  @@index([clienteId])
+  @@index([estado])
+  @@index([fecha])
+}
+
+model VentaItem {
+  id         String  @id @default(cuid())
+  ventaId    String
+  productoId String
+  cantidad   Int
+  precioUnit Decimal @default(0) @db.Decimal(12, 4)
+  costoUnit  Decimal @default(0) @db.Decimal(12, 4)
+  descuento  Decimal @default(0) @db.Decimal(8, 2)
+  subtotal   Decimal @default(0) @db.Decimal(12, 4)
+  lote       String?
+
+  venta    Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@index([ventaId])
+  @@index([productoId])
+}
+
+model Pago {
+  id        String      @id @default(cuid())
+  monto     Decimal     @db.Decimal(12, 4)
+  metodo    MetodoPago  @default(EFECTIVO)
+  referencia String?
+  fecha     DateTime    @default(now())
+  ventaId   String?
+  clienteId String?
+  cajaId    String?
+  tenantId  String
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  venta   Venta?   @relation(fields: [ventaId], references: [id])
+  cliente Cliente? @relation(fields: [clienteId], references: [id])
+  caja    Caja?    @relation(fields: [cajaId], references: [id])
+
+  @@index([tenantId])
+  @@index([ventaId])
+  @@index([clienteId])
+}
+
+model NotaCreditoDebito {
+  id        String   @id @default(cuid())
+  numero    String
+  tipo      NotaTipo @default(CREDITO)
+  motivo    String
+  monto     Decimal  @default(0) @db.Decimal(12, 4)
+  ventaId   String?
+  clienteId String?
+  usuarioId String
+  fecha     DateTime @default(now())
+  tenantId  String
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  venta   Venta?   @relation(fields: [ventaId], references: [id])
+  cliente Cliente? @relation(fields: [clienteId], references: [id])
+  usuario User     @relation(fields: [usuarioId], references: [id])
+
+  @@index([tenantId])
+  @@index([ventaId])
+}
+
+model CuentaPorCobrar {
+  id          String       @id @default(cuid())
+  clienteId   String
+  ventaId     String?
+  monto       Decimal      @db.Decimal(12, 4)
+  saldo       Decimal      @db.Decimal(12, 4)
+  fecha       DateTime     @default(now())
+  vencimiento DateTime
+  estado      EstadoCuenta @default(PENDIENTE)
+  tenantId    String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente  @relation(fields: [clienteId], references: [id])
+  venta   Venta?   @relation(fields: [ventaId], references: [id])
+
+  @@index([tenantId])
+  @@index([clienteId])
+  @@index([estado])
+}
+
+model CuentaPorPagar {
+  id            String       @id @default(cuid())
+  proveedorId   String
+  ordenCompraId String?
+  monto         Decimal      @db.Decimal(12, 4)
+  saldo         Decimal      @db.Decimal(12, 4)
+  fecha         DateTime     @default(now())
+  vencimiento   DateTime
+  estado        EstadoCuenta @default(PENDIENTE)
+  tenantId      String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  proveedor   Proveedor     @relation(fields: [proveedorId], references: [id])
+  ordenCompra OrdenCompra?  @relation(fields: [ordenCompraId], references: [id])
+
+  @@index([tenantId])
+  @@index([proveedorId])
+  @@index([estado])
+}
+
+model Caja {
+  id           String     @id @default(cuid())
+  nombre       String
+  estado       CajaEstado @default(ABIERTA)
+  montoInicial Decimal    @default(0) @db.Decimal(12, 4)
+  montoFinal   Decimal?   @db.Decimal(12, 4)
+  diferencia   Decimal?   @db.Decimal(12, 4)
+  usuarioId    String
+  apertura     DateTime   @default(now())
+  cierre       DateTime?
+  notas        String?
+  tenantId     String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  usuario    User             @relation(fields: [usuarioId], references: [id])
+  movimientos MovimientoCaja[]
+  ventas     Venta[]
+  pagos      Pago[]
+
+  @@index([tenantId])
+  @@index([estado])
+}
+
+model MovimientoCaja {
+  id        String            @id @default(cuid())
+  cajaId    String
+  tipo      MovimientoCajaTipo
+  monto     Decimal           @db.Decimal(12, 4)
+  concepto  String
+  referencia String?
+  fecha     DateTime          @default(now())
+  createdAt DateTime          @default(now())
+
+  caja Caja @relation(fields: [cajaId], references: [id], onDelete: Cascade)
+
+  @@index([cajaId])
+}
+
+model OrdenCompra {
+  id            String    @id @default(cuid())
+  estado        String    @default("PENDIENTE")
+  proveedorId   String?
+  fechaEsperada DateTime?
+  notas         String?
+  total         Decimal   @default(0) @db.Decimal(12, 4)
+  usuarioId     String
+  tenantId      String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  proveedor  Proveedor?        @relation(fields: [proveedorId], references: [id])
+  usuario    User              @relation(fields: [usuarioId], references: [id])
+  items      OrdenCompraItem[]
+  cuentasPorPagar CuentaPorPagar[]
+
+  @@index([tenantId])
+  @@index([proveedorId])
+  @@index([estado])
+}
+
+model OrdenCompraItem {
+  id               String  @id @default(cuid())
+  ordenCompraId    String
+  productoId       String
+  cantidad         Int
+  precioUnit       Decimal @default(0) @db.Decimal(12, 4)
+  subtotal         Decimal @default(0) @db.Decimal(12, 4)
+  cantidadRecibida Int     @default(0)
+
+  ordenCompra OrdenCompra @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  producto    Producto    @relation(fields: [productoId], references: [id])
+
+  @@index([ordenCompraId])
+  @@index([productoId])
 }
