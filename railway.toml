@@ -3,7 +3,7 @@
   buildCommand = "npx prisma generate && npm run build"
 
 [deploy]
-  startCommand = "npx prisma db push --accept-data-loss && npx prisma db seed && npm start"
+  startCommand = "npx prisma db push --accept-data-loss && npm start"
   healthcheckPath = "/api/health"
   healthcheckTimeout = 30
   numReplicas = 1

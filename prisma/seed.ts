@@ -10,19 +10,15 @@ const SUPER_ADMIN_NOMBRE = "Administrador TotalAppGT";
 async function main() {
   console.log("Iniciando seed de InvenPro SaaS...");
 
-  console.log("Limpiando datos existentes...");
-  await prisma.alerta.deleteMany();
-  await prisma.conteoItem.deleteMany();
-  await prisma.conteo.deleteMany();
-  await prisma.movimiento.deleteMany();
-  await prisma.inventario.deleteMany();
-  await prisma.producto.deleteMany();
-  await prisma.categoria.deleteMany();
-  await prisma.proveedor.deleteMany();
-  await prisma.bodega.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.subscriptionPlan.deleteMany();
-  await prisma.tenant.deleteMany();
+  // SEGURIDAD: el seed NUNCA borra datos. Si la base ya tiene información,
+  // se omite por completo para no destruir datos de producción.
+  const existingTenants = await prisma.tenant.count();
+  if (existingTenants > 0) {
+    console.log(`La base ya contiene ${existingTenants} tenant(s). Seed OMITIDO (no se borra nada).`);
+    return;
+  }
+
+  console.log("Base vacía detectada. Creando datos iniciales...");
 
   // 1. Super Admin Tenant
   console.log("Creando tenant Super Admin...");
