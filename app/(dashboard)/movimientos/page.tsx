@@ -1,63 +1,63 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { api } from "@/lib/api-client";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
-import {
-  Search, Plus, Download, FileText, ArrowLeftRight, Eye, ChevronLeft, ChevronRight, Calendar, Filter, X,
-} from "lucide-react";
+import { Search, Plus, FileText, Eye, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 interface MovimientoItem {
   id: string;
-  fecha: string;
   tipo: string;
-  bodega: string;
-  bodegaDestino: string | null;
-  producto: string;
+  fecha: string;
   cantidad: number;
   cantAnterior: number;
   cantNueva: number;
-  usuario: string;
+  costoUnit: number;
+  total: number;
+  producto: { id: string; codigo: string; nombre: string } | null;
+  bodega: { id: string; nombre: string } | null;
+  bodegaDestino: { id: string; nombre: string } | null;
+  usuario: { id: string; nombre: string; email: string } | null;
   notas: string | null;
+  referencia: string | null;
   documento: string | null;
 }
 
-interface MovimientoFormData {
-  tipo: string;
-  bodega: string;
-  bodegaDestino: string;
-  producto: string;
-  cantidad: number;
-  notas: string;
-  referencia: string;
-  documento: string;
-}
+interface ProductoOption { id: string; codigo: string; nombre: string; costoUnit: number; }
+interface BodegaOption { id: string; nombre: string; }
 
 const tipoBadge: Record<string, "success" | "destructive" | "warning" | "default"> = {
-  ENTRADA: "success", SALIDA: "destructive", AJUSTE: "warning", TRASLADO: "default",
+  ENTRADA: "success", SALIDA: "destructive", AJUSTE: "warning", TRASLADO: "default", CONTEO_DIFERENCIA: "warning",
 };
 const tipoLabel: Record<string, string> = {
-  ENTRADA: "Entrada", SALIDA: "Salida", AJUSTE: "Ajuste", TRASLADO: "Traslado",
+  ENTRADA: "Entrada", SALIDA: "Salida", AJUSTE: "Ajuste", TRASLADO: "Traslado", CONTEO_DIFERENCIA: "Conteo",
 };
 const datePresets = [
-  { label: "Hoy", days: 0 }, { label: "Esta semana", days: 7 }, { label: "Este mes", days: 30 },
+  { label: "Hoy", days: 0 }, { label: "7 días", days: 7 }, { label: "30 días", days: 30 },
 ];
+
+const emptyForm = {
+  tipo: "ENTRADA", productoId: "", bodegaId: "", bodegaDestinoId: "", cantidad: 1,
+  costoUnit: 0, notas: "", referencia: "", documento: "",
+};
 
 export default function MovimientosPage() {
   const [loading, setLoading] = useState(true);
   const [movimientos, setMovimientos] = useState<MovimientoItem[]>([]);
+  const [productos, setProductos] = useState<ProductoOption[]>([]);
+  const [bodegas, setBodegas] = useState<BodegaOption[]>([]);
   const [search, setSearch] = useState("");
   const [filterTipo, setFilterTipo] = useState("TODOS");
   const [filterBodega, setFilterBodega] = useState("TODAS");
-  const [filterUsuario, setFilterUsuario] = useState("");
   const [datePreset, setDatePreset] = useState("TODOS");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -65,98 +65,122 @@ export default function MovimientosPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedMov, setSelectedMov] = useState<MovimientoItem | null>(null);
-  const [form, setForm] = useState<MovimientoFormData>({
-    tipo: "ENTRADA", bodega: "Bodega Central", bodegaDestino: "",
-    producto: "", cantidad: 1, notas: "", referencia: "", documento: "",
-  });
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ ...emptyForm });
   const perPage = 15;
 
-  const fetchMovimientos = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    const bodegas = ["Bodega Central", "Bodega Norte", "Bodega Sur", "Bodega Este"];
-    const productos = ["Tornillo 3/4\"", "Cemento Portland", "Laptop HP", "Papel Bond A4", "Martillo 16oz", "Pintura Blanca", "Mouse", "Destornillador"];
-    const usuarios = ["Juan Pérez", "María García", "Carlos López"];
-    const tipos = ["ENTRADA", "SALIDA", "AJUSTE", "TRASLADO"] as const;
-    const mock: MovimientoItem[] = Array.from({ length: 78 }, (_, i) => {
-      const tipo = tipos[i % 4];
-      const cant = Math.floor(Math.random() * 100) + 1;
-      return {
-        id: `mov-${i + 1}`,
-        fecha: new Date(Date.now() - i * 7200000).toISOString(),
-        tipo,
-        bodega: bodegas[i % 4],
-        bodegaDestino: tipo === "TRASLADO" ? bodegas[(i + 2) % 4] : null,
-        producto: productos[i % 8],
-        cantidad: cant,
-        cantAnterior: cant + Math.floor(Math.random() * 30),
-        cantNueva: cant,
-        usuario: usuarios[i % 3],
-        notas: i % 3 === 0 ? `Nota de movimiento #${i + 1}` : null,
-        documento: i % 4 === 0 ? `DOC-${String(i + 1).padStart(3, "0")}` : null,
-      };
-    });
-    setMovimientos(mock);
+    const [m, p, b] = await Promise.all([
+      api<MovimientoItem[]>("/api/movimientos?limit=100"),
+      api<ProductoOption[]>("/api/productos?limit=200"),
+      api<BodegaOption[]>("/api/bodegas?limit=100"),
+    ]);
+    if (m.success) setMovimientos(m.data ?? []); else toast.error(m.error);
+    if (p.success) setProductos(p.data ?? []);
+    if (b.success) setBodegas(b.data ?? []);
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchMovimientos(); }, [fetchMovimientos]);
-
-  const bodegas = useMemo(() => [...new Set(movimientos.map((m) => m.bodega))].sort(), [movimientos]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const filtered = useMemo(() => {
     let result = [...movimientos];
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter((m) => m.producto.toLowerCase().includes(q) || (m.documento && m.documento.toLowerCase().includes(q)));
+      result = result.filter((m) =>
+        (m.producto?.nombre ?? "").toLowerCase().includes(q) ||
+        (m.producto?.codigo ?? "").toLowerCase().includes(q) ||
+        (m.documento ?? "").toLowerCase().includes(q) ||
+        (m.referencia ?? "").toLowerCase().includes(q)
+      );
     }
     if (filterTipo !== "TODOS") result = result.filter((m) => m.tipo === filterTipo);
-    if (filterBodega !== "TODAS") result = result.filter((m) => m.bodega === filterBodega);
-    if (filterUsuario) result = result.filter((m) => m.usuario.toLowerCase().includes(filterUsuario.toLowerCase()));
+    if (filterBodega !== "TODAS") result = result.filter((m) => m.bodega?.id === filterBodega);
     if (datePreset !== "TODOS") {
-      const days = parseInt(datePreset);
+      const days = parseInt(datePreset, 10);
       const cutoff = new Date(Date.now() - days * 86400000);
       result = result.filter((m) => new Date(m.fecha) >= cutoff);
     }
     if (dateFrom) result = result.filter((m) => new Date(m.fecha) >= new Date(dateFrom));
     if (dateTo) result = result.filter((m) => new Date(m.fecha) <= new Date(dateTo + "T23:59:59"));
     return result;
-  }, [movimientos, search, filterTipo, filterBodega, filterUsuario, datePreset, dateFrom, dateTo]);
+  }, [movimientos, search, filterTipo, filterBodega, datePreset, dateFrom, dateTo]);
 
-  const totalPages = Math.ceil(filtered.length / perPage);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
   const openNew = () => {
-    setForm({ tipo: "ENTRADA", bodega: bodegas[0] || "", bodegaDestino: "", producto: "", cantidad: 1, notas: "", referencia: "", documento: "" });
+    setForm({
+      ...emptyForm,
+      productoId: productos[0]?.id ?? "",
+      bodegaId: bodegas[0]?.id ?? "",
+      costoUnit: productos[0]?.costoUnit ?? 0,
+    });
     setDialogOpen(true);
   };
 
-  const openDetail = (m: MovimientoItem) => { setSelectedMov(m); setDetailDialogOpen(true); };
-
-  const handleSave = () => {
-    if (!form.producto || form.cantidad <= 0) { toast.error("Complete todos los campos"); return; }
-    if (form.tipo === "SALIDA") toast.info("Validando stock disponible...");
-    const newMov: MovimientoItem = {
-      id: `mov-${Date.now()}`, fecha: new Date().toISOString(), tipo: form.tipo,
-      bodega: form.bodega, bodegaDestino: form.tipo === "TRASLADO" ? form.bodegaDestino : null,
-      producto: form.producto, cantidad: form.cantidad, cantAnterior: form.cantidad + 10,
-      cantNueva: form.cantidad, usuario: "Usuario Actual", notas: form.notas || null,
-      documento: form.documento || null,
-    };
-    setMovimientos((prev) => [newMov, ...prev]);
-    toast.success(`Movimiento de ${tipoLabel[form.tipo]} registrado`);
-    setDialogOpen(false);
+  const handleProductoChange = (id: string) => {
+    const prod = productos.find((p) => p.id === id);
+    setForm((prev) => ({ ...prev, productoId: id, costoUnit: prod?.costoUnit ?? prev.costoUnit }));
   };
 
-  const handleExportPDF = () => toast.success("Exportando a PDF...");
-  const handleExportExcel = () => toast.success("Exportando a Excel...");
+  const handleSave = async () => {
+    if (!form.productoId || !form.bodegaId || form.cantidad <= 0) {
+      toast.error("Producto, bodega y cantidad son obligatorios");
+      return;
+    }
+    if (form.tipo === "TRASLADO" && (!form.bodegaDestinoId || form.bodegaDestinoId === form.bodegaId)) {
+      toast.error("Selecciona una bodega destino diferente");
+      return;
+    }
+    setSaving(true);
+    const res = await api("/api/movimientos", {
+      method: "POST",
+      body: {
+        tipo: form.tipo,
+        productoId: form.productoId,
+        bodegaId: form.bodegaId,
+        bodegaDestinoId: form.tipo === "TRASLADO" ? form.bodegaDestinoId : null,
+        cantidad: Number(form.cantidad),
+        costoUnit: Number(form.costoUnit) || 0,
+        notas: form.notas || null,
+        referencia: form.referencia || null,
+        documento: form.documento || null,
+      },
+    });
+    setSaving(false);
+    if (res.success) {
+      toast.success("Movimiento registrado");
+      setDialogOpen(false);
+      fetchData();
+    } else toast.error(res.error);
+  };
+
+  const exportCSV = () => {
+    const header = "Fecha,Tipo,Producto,Bodega,Destino,Cantidad,Costo,Total,Usuario,Documento,Notas\n";
+    const rows = filtered.map((m) => [
+      formatDateTime(m.fecha), tipoLabel[m.tipo] || m.tipo,
+      (m.producto?.nombre ?? "").replace(/,/g, " "), m.bodega?.nombre ?? "", m.bodegaDestino?.nombre ?? "",
+      m.cantidad, m.costoUnit.toFixed(2), m.total.toFixed(2), m.usuario?.nombre ?? "",
+      m.documento ?? "", (m.notas ?? "").replace(/,/g, " "),
+    ].join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `movimientos_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado");
+  };
 
   const clearFilters = () => {
     setSearch(""); setFilterTipo("TODOS"); setFilterBodega("TODAS");
-    setFilterUsuario(""); setDatePreset("TODOS"); setDateFrom(""); setDateTo(""); setPage(1);
+    setDatePreset("TODOS"); setDateFrom(""); setDateTo(""); setPage(1);
   };
 
-  const hasFilters = search || filterTipo !== "TODOS" || filterBodega !== "TODAS" || filterUsuario || datePreset !== "TODOS" || dateFrom || dateTo;
+  const hasFilters = search || filterTipo !== "TODOS" || filterBodega !== "TODAS" || datePreset !== "TODOS" || dateFrom || dateTo;
 
   if (loading) {
     return (<div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96 rounded-xl" /></div>);
@@ -167,11 +191,11 @@ export default function MovimientosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Movimientos</h1>
-          <p className="text-sm text-muted-foreground">Registro de entradas, salidas y ajustes</p>
+          <p className="text-sm text-muted-foreground">Registro de entradas, salidas, ajustes y traslados</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportPDF}><FileText className="mr-1 h-3.5 w-3.5" />PDF</Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel}><Download className="mr-1 h-3.5 w-3.5" />Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportCSV}><FileText className="mr-1 h-3.5 w-3.5" />CSV</Button>
+          <Button size="sm" onClick={openNew}><Plus className="mr-1 h-4 w-4" />Nuevo Movimiento</Button>
         </div>
       </div>
 
@@ -180,7 +204,7 @@ export default function MovimientosPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[200px] flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Buscar producto o documento..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
+              <Input placeholder="Buscar producto, código o documento..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
             </div>
             <select value={filterTipo} onChange={(e) => { setFilterTipo(e.target.value); setPage(1); }} className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
               <option value="TODOS">Todos los tipos</option>
@@ -191,9 +215,8 @@ export default function MovimientosPage() {
             </select>
             <select value={filterBodega} onChange={(e) => { setFilterBodega(e.target.value); setPage(1); }} className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
               <option value="TODAS">Todas las bodegas</option>
-              {bodegas.map((b) => <option key={b} value={b}>{b}</option>)}
+              {bodegas.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
             </select>
-            <Input placeholder="Filtrar usuario..." value={filterUsuario} onChange={(e) => { setFilterUsuario(e.target.value); setPage(1); }} className="w-36" />
             <div className="flex items-center gap-1 rounded-lg border border-white/[0.06] bg-[#0f0f2e] p-1">
               {datePresets.map((p) => (
                 <button
@@ -218,25 +241,25 @@ export default function MovimientosPage() {
                 <tr className="border-b border-white/[0.04] text-left text-xs text-muted-foreground">
                   <th className="pb-3 pr-4 font-medium">Fecha</th>
                   <th className="pb-3 pr-4 font-medium">Tipo</th>
-                  <th className="pb-3 pr-4 font-medium">Bodega</th>
                   <th className="pb-3 pr-4 font-medium">Producto</th>
+                  <th className="pb-3 pr-4 font-medium">Bodega</th>
                   <th className="pb-3 pr-4 font-medium text-right">Cantidad</th>
+                  <th className="pb-3 pr-4 font-medium text-right">Stock Ant. → Nuevo</th>
                   <th className="pb-3 pr-4 font-medium">Usuario</th>
-                  <th className="pb-3 pr-4 font-medium">Notas</th>
                   <th className="pb-3 pr-4 font-medium">Documento</th>
                   <th className="pb-3 pr-4 text-right font-medium">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((m) => (
-                  <tr key={m.id} className="cursor-pointer border-b border-white/[0.02] transition-colors hover:bg-white/[0.02]" onClick={() => openDetail(m)}>
+                  <tr key={m.id} className="cursor-pointer border-b border-white/[0.02] transition-colors hover:bg-white/[0.02]" onClick={() => { setSelectedMov(m); setDetailDialogOpen(true); }}>
                     <td className="py-3 pr-4 whitespace-nowrap font-mono text-xs text-muted-foreground">{formatDateTime(m.fecha)}</td>
                     <td className="py-3 pr-4"><Badge variant={tipoBadge[m.tipo] || "default"} className="text-[10px]">{tipoLabel[m.tipo] || m.tipo}</Badge></td>
-                    <td className="py-3 pr-4 text-muted-foreground">{m.bodega}</td>
-                    <td className="py-3 pr-4 font-medium text-white">{m.producto}</td>
+                    <td className="py-3 pr-4 font-medium text-white">{m.producto?.nombre ?? "—"}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{m.bodega?.nombre ?? "—"}{m.bodegaDestino ? ` → ${m.bodegaDestino.nombre}` : ""}</td>
                     <td className="py-3 pr-4 text-right font-medium text-white">{m.cantidad}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{m.usuario}</td>
-                    <td className="py-3 pr-4 max-w-[150px] truncate text-muted-foreground">{m.notas || "—"}</td>
+                    <td className="py-3 pr-4 text-right text-muted-foreground">{m.cantAnterior} → {m.cantNueva}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{m.usuario?.nombre ?? "—"}</td>
                     <td className="py-3 pr-4 font-mono text-xs text-indigo-400">{m.documento || "—"}</td>
                     <td className="py-3 pr-4 text-right"><Eye className="ml-auto h-3.5 w-3.5 text-muted-foreground" /></td>
                   </tr>
@@ -258,10 +281,6 @@ export default function MovimientosPage() {
         </CardContent>
       </Card>
 
-      <Button size="sm" className="fixed bottom-6 right-6 z-50 shadow-lg shadow-indigo-500/30" onClick={openNew}>
-        <Plus className="mr-1 h-4 w-4" />Nuevo Movimiento
-      </Button>
-
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -275,7 +294,7 @@ export default function MovimientosPage() {
                 {["ENTRADA", "SALIDA", "AJUSTE", "TRASLADO"].map((t) => (
                   <button
                     key={t}
-                    onClick={() => setForm({ ...form, tipo: t, bodegaDestino: t !== "TRASLADO" ? "" : form.bodegaDestino })}
+                    onClick={() => setForm({ ...form, tipo: t, bodegaDestinoId: t !== "TRASLADO" ? "" : form.bodegaDestinoId })}
                     className={cn("flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
                       form.tipo === t
                         ? t === "ENTRADA" ? "bg-emerald-500/20 text-emerald-400" : t === "SALIDA" ? "bg-red-500/20 text-red-400" : t === "AJUSTE" ? "bg-amber-500/20 text-amber-400" : "bg-indigo-500/20 text-indigo-400"
@@ -287,100 +306,80 @@ export default function MovimientosPage() {
                 ))}
               </div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-white">Bodega</Label>
-              <select value={form.bodega} onChange={(e) => setForm({ ...form, bodega: e.target.value })} className="w-full rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
-                {bodegas.map((b) => <option key={b} value={b}>{b}</option>)}
-              </select>
+            <div className="col-span-2 space-y-2">
+              <Label className="text-white">Producto *</Label>
+              <Select value={form.productoId} onValueChange={handleProductoChange}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
+                <SelectContent>
+                  {productos.map((p) => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            {form.tipo === "TRASLADO" && (
+            <div className="space-y-2">
+              <Label className="text-white">Bodega *</Label>
+              <Select value={form.bodegaId} onValueChange={(v) => setForm({ ...form, bodegaId: v })}>
+                <SelectTrigger><SelectValue placeholder="Bodega" /></SelectTrigger>
+                <SelectContent>{bodegas.map((b) => <SelectItem key={b.id} value={b.id}>{b.nombre}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            {form.tipo === "TRASLADO" ? (
               <div className="space-y-2">
-                <Label className="text-white">Bodega Destino</Label>
-                <select value={form.bodegaDestino} onChange={(e) => setForm({ ...form, bodegaDestino: e.target.value })} className="w-full rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
-                  {bodegas.filter((b) => b !== form.bodega).map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
+                <Label className="text-white">Bodega Destino *</Label>
+                <Select value={form.bodegaDestinoId} onValueChange={(v) => setForm({ ...form, bodegaDestinoId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger>
+                  <SelectContent>{bodegas.filter((b) => b.id !== form.bodegaId).map((b) => <SelectItem key={b.id} value={b.id}>{b.nombre}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label className="text-white">Costo Unitario</Label>
+                <Input type="number" value={form.costoUnit} onChange={(e) => setForm({ ...form, costoUnit: Number(e.target.value) })} />
               </div>
             )}
-            <div className={form.tipo === "TRASLADO" ? "col-span-2 space-y-2" : "space-y-2"}>
-              <Label className="text-white">Producto</Label>
-              <Input value={form.producto} onChange={(e) => setForm({ ...form, producto: e.target.value })} placeholder="Buscar producto..." />
-            </div>
-            <div className={form.tipo === "TRASLADO" ? "space-y-2" : "space-y-2"}>
-              <Label className="text-white">Cantidad</Label>
-              <Input type="number" min="1" value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: Number(e.target.value) })} />
-            </div>
-            <div className={form.tipo === "TRASLADO" ? "col-span-2 space-y-2" : "space-y-2"}>
-              <Label className="text-white">Notas</Label>
-              <Input value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} placeholder="Notas del movimiento" />
-            </div>
             <div className="space-y-2">
-              <Label className="text-white">Referencia</Label>
-              <Input value={form.referencia} onChange={(e) => setForm({ ...form, referencia: e.target.value })} placeholder="Referencia" />
+              <Label className="text-white">{form.tipo === "AJUSTE" ? "Cantidad final *" : "Cantidad *"}</Label>
+              <Input type="number" min="1" value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: Number(e.target.value) })} />
             </div>
             <div className="space-y-2">
               <Label className="text-white">Documento</Label>
               <Input value={form.documento} onChange={(e) => setForm({ ...form, documento: e.target.value })} placeholder="N° de documento" />
             </div>
+            <div className="col-span-2 space-y-2">
+              <Label className="text-white">Referencia</Label>
+              <Input value={form.referencia} onChange={(e) => setForm({ ...form, referencia: e.target.value })} placeholder="Referencia" />
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label className="text-white">Notas</Label>
+              <Input value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} placeholder="Notas del movimiento" />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!form.producto || form.cantidad <= 0}>Registrar Movimiento</Button>
+            <Button onClick={handleSave} loading={saving} disabled={!form.productoId || !form.bodegaId || form.cantidad <= 0}>Registrar Movimiento</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-white">Detalle del Movimiento</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-white">Detalle del Movimiento</DialogTitle></DialogHeader>
           {selectedMov && (
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">Tipo</p>
-                  <Badge variant={tipoBadge[selectedMov.tipo] || "default"} className="mt-1">{tipoLabel[selectedMov.tipo]}</Badge>
-                </div>
-                <div className="rounded-lg bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">Fecha</p>
-                  <p className="mt-1 text-sm font-medium text-white">{formatDateTime(selectedMov.fecha)}</p>
-                </div>
-                <div className="rounded-lg bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">Producto</p>
-                  <p className="mt-1 text-sm font-medium text-white">{selectedMov.producto}</p>
-                </div>
-                <div className="rounded-lg bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">Bodega</p>
-                  <p className="mt-1 text-sm font-medium text-white">{selectedMov.bodega}</p>
-                </div>
-                {selectedMov.bodegaDestino && (
-                  <div className="col-span-2 rounded-lg bg-white/[0.02] p-3">
-                    <p className="text-xs text-muted-foreground">Bodega Destino</p>
-                    <p className="mt-1 text-sm font-medium text-white">{selectedMov.bodegaDestino}</p>
-                  </div>
-                )}
-                <div className="rounded-lg bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">Cantidad</p>
-                  <p className="mt-1 text-sm font-bold text-white">{selectedMov.cantidad}</p>
-                </div>
-                <div className="rounded-lg bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">Stock Anterior → Nuevo</p>
-                  <p className="mt-1 text-sm text-white">{selectedMov.cantAnterior} → {selectedMov.cantNueva}</p>
-                </div>
-                <div className="rounded-lg bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">Usuario</p>
-                  <p className="mt-1 text-sm text-white">{selectedMov.usuario}</p>
-                </div>
-                <div className="rounded-lg bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">Documento</p>
-                  <p className="mt-1 text-sm text-white">{selectedMov.documento || "N/A"}</p>
-                </div>
-                {selectedMov.notas && (
-                  <div className="col-span-2 rounded-lg bg-white/[0.02] p-3">
-                    <p className="text-xs text-muted-foreground">Notas</p>
-                    <p className="mt-1 text-sm text-white">{selectedMov.notas}</p>
-                  </div>
-                )}
+                <DetailBox label="Tipo"><Badge variant={tipoBadge[selectedMov.tipo] || "default"}>{tipoLabel[selectedMov.tipo] || selectedMov.tipo}</Badge></DetailBox>
+                <DetailBox label="Fecha">{formatDateTime(selectedMov.fecha)}</DetailBox>
+                <DetailBox label="Producto">{selectedMov.producto?.nombre ?? "—"}</DetailBox>
+                <DetailBox label="Código">{selectedMov.producto?.codigo ?? "—"}</DetailBox>
+                <DetailBox label="Bodega">{selectedMov.bodega?.nombre ?? "—"}</DetailBox>
+                <DetailBox label="Cantidad">{selectedMov.cantidad}</DetailBox>
+                <DetailBox label="Stock Anterior → Nuevo">{selectedMov.cantAnterior} → {selectedMov.cantNueva}</DetailBox>
+                <DetailBox label="Costo Unit.">{formatCurrency(selectedMov.costoUnit)}</DetailBox>
+                <DetailBox label="Total">{formatCurrency(selectedMov.total)}</DetailBox>
+                <DetailBox label="Usuario">{selectedMov.usuario?.nombre ?? "—"}</DetailBox>
+                {selectedMov.bodegaDestino && (<div className="col-span-2"><DetailBox label="Bodega Destino">{selectedMov.bodegaDestino.nombre}</DetailBox></div>)}
+                <DetailBox label="Documento">{selectedMov.documento || "N/A"}</DetailBox>
+                <DetailBox label="Referencia">{selectedMov.referencia || "N/A"}</DetailBox>
+                {selectedMov.notas && (<div className="col-span-2"><DetailBox label="Notas">{selectedMov.notas}</DetailBox></div>)}
               </div>
             </div>
           )}
@@ -389,6 +388,15 @@ export default function MovimientosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function DetailBox({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg bg-white/[0.02] p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="mt-1 text-sm font-medium text-white">{children}</div>
     </div>
   );
 }

@@ -1,20 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { formatDate, cn } from "@/lib/utils";
-import {
-  Search, Plus, Pencil, Eye, Trash2, Truck, Phone, Mail, MapPin, FileText, User,
-} from "lucide-react";
+import { api } from "@/lib/api-client";
+import { Search, Plus, Pencil, Trash2 } from "lucide-react";
 
 interface ProveedorItem {
   id: string;
@@ -25,8 +20,8 @@ interface ProveedorItem {
   direccion: string | null;
   nit: string | null;
   notas: string | null;
-  activo: boolean;
   productosCount: number;
+  createdAt: string;
 }
 
 interface ProveedorFormData {
@@ -39,30 +34,22 @@ interface ProveedorFormData {
   notas: string;
 }
 
+const emptyForm: ProveedorFormData = { nombre: "", contacto: "", telefono: "", email: "", direccion: "", nit: "", notas: "" };
+
 export default function ProveedoresPage() {
   const [loading, setLoading] = useState(true);
   const [proveedores, setProveedores] = useState<ProveedorItem[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProv, setEditingProv] = useState<ProveedorItem | null>(null);
-  const [form, setForm] = useState<ProveedorFormData>({
-    nombre: "", contacto: "", telefono: "", email: "", direccion: "", nit: "", notas: "",
-  });
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<ProveedorFormData>({ ...emptyForm });
 
   const fetchProveedores = useCallback(async () => {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 500));
-    const mock: ProveedorItem[] = [
-      { id: "1", nombre: "Distribuidora El Sol", contacto: "Carlos Méndez", telefono: "5555-1234", email: "ventas@elsol.com", direccion: "Zona 1, Guatemala", nit: "1234567-8", notas: "Proveedor principal de ferretería", activo: true, productosCount: 85 },
-      { id: "2", nombre: "Importadora Tech", contacto: "Ana López", telefono: "5555-5678", email: "info@importech.com", direccion: "Zona 10, Guatemala", nit: "2345678-9", notas: null, activo: true, productosCount: 120 },
-      { id: "3", nombre: "FerreMax SA", contacto: "Pedro Ramírez", telefono: "5555-9012", email: "pedro@ferremax.com", direccion: "Mixco, Guatemala", nit: "3456789-0", notas: "Condiciones de pago a 30 días", activo: true, productosCount: 45 },
-      { id: "4", nombre: "Materiales del Norte", contacto: "María García", telefono: "5555-3456", email: null, direccion: "Cobán, Alta Verapaz", nit: null, notas: "Entrega rápida zona norte", activo: true, productosCount: 32 },
-      { id: "5", nombre: "Pinturas y Más", contacto: null, telefono: "5555-7890", email: "ventas@pinturasyas.com", direccion: "Zona 9, Guatemala", nit: "4567890-1", notas: null, activo: false, productosCount: 18 },
-      { id: "6", nombre: "Electro Guatemala", contacto: "José Hernández", telefono: "5555-2345", email: "jose@electrogt.com", direccion: "Villa Nueva", nit: "5678901-2", notas: "Descuento 10% por volumen", activo: true, productosCount: 67 },
-      { id: "7", nombre: "Papelería Universal", contacto: "Sofía Reyes", telefono: "5555-6789", email: "sofia@papeluniversal.com", direccion: "Zona 4, Guatemala", nit: "6789012-3", notas: null, activo: true, productosCount: 28 },
-      { id: "8", nombre: "ConstruFácil", contacto: "Diego Morales", telefono: "5555-0123", email: null, direccion: null, nit: null, notas: "Nuevo proveedor", activo: true, productosCount: 12 },
-    ];
-    setProveedores(mock);
+    const res = await api<ProveedorItem[]>("/api/proveedores?limit=100");
+    if (res.success) setProveedores(res.data ?? []);
+    else toast.error(res.error);
     setLoading(false);
   }, []);
 
@@ -71,14 +58,15 @@ export default function ProveedoresPage() {
   const filtered = useMemo(() => {
     if (!search) return proveedores;
     const q = search.toLowerCase();
-    return proveedores.filter((p) => p.nombre.toLowerCase().includes(q) || (p.contacto && p.contacto.toLowerCase().includes(q)) || (p.nit && p.nit.includes(q)) || (p.email && p.email.toLowerCase().includes(q)));
+    return proveedores.filter((p) =>
+      p.nombre.toLowerCase().includes(q) ||
+      (p.contacto ?? "").toLowerCase().includes(q) ||
+      (p.nit ?? "").includes(q) ||
+      (p.email ?? "").toLowerCase().includes(q)
+    );
   }, [proveedores, search]);
 
-  const openNew = () => {
-    setEditingProv(null);
-    setForm({ nombre: "", contacto: "", telefono: "", email: "", direccion: "", nit: "", notas: "" });
-    setDialogOpen(true);
-  };
+  const openNew = () => { setEditingProv(null); setForm({ ...emptyForm }); setDialogOpen(true); };
 
   const openEdit = (p: ProveedorItem) => {
     setEditingProv(p);
@@ -89,27 +77,34 @@ export default function ProveedoresPage() {
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.nombre) { toast.error("El nombre es obligatorio"); return; }
-    if (editingProv) {
-      setProveedores((prev) => prev.map((p) => p.id === editingProv.id ? { ...p, ...form, contacto: form.contacto || null, telefono: form.telefono || null, email: form.email || null, direccion: form.direccion || null, nit: form.nit || null, notas: form.notas || null } : p));
-      toast.success(`Proveedor ${form.nombre} actualizado`);
-    } else {
-      const newP: ProveedorItem = {
-        id: `prov-${Date.now()}`, ...form, contacto: form.contacto || null,
-        telefono: form.telefono || null, email: form.email || null,
-        direccion: form.direccion || null, nit: form.nit || null,
-        notas: form.notas || null, activo: true, productosCount: 0,
-      };
-      setProveedores((prev) => [...prev, newP]);
-      toast.success(`Proveedor ${form.nombre} creado`);
-    }
-    setDialogOpen(false);
+    setSaving(true);
+    const payload = {
+      nombre: form.nombre,
+      contacto: form.contacto || null,
+      telefono: form.telefono || null,
+      email: form.email || null,
+      direccion: form.direccion || null,
+      nit: form.nit || null,
+      notas: form.notas || null,
+    };
+    const res = editingProv
+      ? await api(`/api/proveedores/${editingProv.id}`, { method: "PUT", body: payload })
+      : await api("/api/proveedores", { method: "POST", body: payload });
+    setSaving(false);
+    if (res.success) {
+      toast.success(editingProv ? "Proveedor actualizado" : "Proveedor creado");
+      setDialogOpen(false);
+      fetchProveedores();
+    } else toast.error(res.error);
   };
 
-  const handleToggleActive = (p: ProveedorItem) => {
-    setProveedores((prev) => prev.map((pr) => pr.id === p.id ? { ...pr, activo: !pr.activo } : pr));
-    toast.success(`${p.nombre} ${p.activo ? "desactivado" : "activado"}`);
+  const handleDelete = async (p: ProveedorItem) => {
+    if (!confirm(`¿Eliminar el proveedor "${p.nombre}"?`)) return;
+    const res = await api(`/api/proveedores/${p.id}`, { method: "DELETE" });
+    if (res.success) { toast.success(res.message ?? "Proveedor eliminado"); fetchProveedores(); }
+    else toast.error(res.error);
   };
 
   if (loading) {
@@ -142,7 +137,6 @@ export default function ProveedoresPage() {
                   <th className="pb-3 pr-4 font-medium">Teléfono</th>
                   <th className="pb-3 pr-4 font-medium">Email</th>
                   <th className="pb-3 pr-4 font-medium">NIT</th>
-                  <th className="pb-3 pr-4 font-medium">Estado</th>
                   <th className="pb-3 pr-4 font-medium text-right">Productos</th>
                   <th className="pb-3 pr-4 text-right font-medium">Acciones</th>
                 </tr>
@@ -155,22 +149,16 @@ export default function ProveedoresPage() {
                     <td className="py-3 pr-4 text-muted-foreground">{p.telefono || "—"}</td>
                     <td className="py-3 pr-4 text-muted-foreground">{p.email || "—"}</td>
                     <td className="py-3 pr-4 font-mono text-xs text-muted-foreground">{p.nit || "—"}</td>
-                    <td className="py-3 pr-4">
-                      <Badge variant={p.activo ? "success" : "default"} className="text-[10px]">
-                        {p.activo ? "Activo" : "Inactivo"}
-                      </Badge>
-                    </td>
                     <td className="py-3 pr-4 text-right text-white">{p.productosCount}</td>
                     <td className="py-3 pr-4 text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toast.info(`Ver productos de ${p.nombre}`)}><Eye className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleToggleActive(p)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300" onClick={() => handleDelete(p)}><Trash2 className="h-3.5 w-3.5" /></Button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {filtered.length === 0 && (<tr><td colSpan={8} className="py-12 text-center text-muted-foreground">No se encontraron proveedores</td></tr>)}
+                {filtered.length === 0 && (<tr><td colSpan={7} className="py-12 text-center text-muted-foreground">No se encontraron proveedores</td></tr>)}
               </tbody>
             </table>
           </div>
@@ -202,7 +190,7 @@ export default function ProveedoresPage() {
             </div>
             <div className="space-y-2">
               <Label className="text-white">NIT</Label>
-              <Input value={form.nit} onChange={(e) => setForm({ ...form, nit: e.target.value })} placeholder="1234567-8" />
+              <Input value={form.nit} onChange={(e) => setForm({ ...form, nit: e.target.value })} placeholder="1234567-8 o C/F" />
             </div>
             <div className="col-span-2 space-y-2">
               <Label className="text-white">Dirección</Label>
@@ -215,7 +203,7 @@ export default function ProveedoresPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>{editingProv ? "Guardar Cambios" : "Crear Proveedor"}</Button>
+            <Button onClick={handleSave} loading={saving}>{editingProv ? "Guardar Cambios" : "Crear Proveedor"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

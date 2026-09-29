@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,30 +12,32 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import { api } from "@/lib/api-client";
+import { formatDate, cn } from "@/lib/utils";
 import {
-  Search, Plus, Pencil, Eye, Trash2, Warehouse, Package, DollarSign, CheckCircle, Grid3X3, List,
+  Search, Plus, Pencil, Eye, Trash2, Warehouse, Package, CheckCircle, Grid3X3, List,
 } from "lucide-react";
 
 interface BodegaItem {
   id: string;
   nombre: string;
-  descripcion: string | null;
-  ubicacion: string | null;
-  responsable: string | null;
+  direccion: string | null;
+  telefono: string | null;
+  encargado: string | null;
   activa: boolean;
-  productosCount: number;
-  valorTotal: number;
+  inventarioCount: number;
   createdAt: string;
 }
 
 interface BodegaFormData {
   nombre: string;
-  descripcion: string;
-  ubicacion: string;
-  responsable: string;
+  direccion: string;
+  telefono: string;
+  encargado: string;
   activa: boolean;
 }
+
+const emptyForm: BodegaFormData = { nombre: "", direccion: "", telefono: "", encargado: "", activa: true };
 
 export default function BodegasPage() {
   const [loading, setLoading] = useState(true);
@@ -44,22 +46,14 @@ export default function BodegasPage() {
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingBodega, setEditingBodega] = useState<BodegaItem | null>(null);
-  const [form, setForm] = useState<BodegaFormData>({
-    nombre: "", descripcion: "", ubicacion: "", responsable: "", activa: true,
-  });
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<BodegaFormData>({ ...emptyForm });
 
   const fetchBodegas = useCallback(async () => {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    const mock: BodegaItem[] = [
-      { id: "b1", nombre: "Bodega Central", descripcion: "Almacén principal de la empresa", ubicacion: "Guatemala, Zona 1", responsable: "Juan Pérez", activa: true, productosCount: 450, valorTotal: 245000, createdAt: new Date("2024-01-15").toISOString() },
-      { id: "b2", nombre: "Bodega Norte", descripcion: "Sucursal zona norte", ubicacion: "Cobán, Alta Verapaz", responsable: "María García", activa: true, productosCount: 320, valorTotal: 120000, createdAt: new Date("2024-03-22").toISOString() },
-      { id: "b3", nombre: "Bodega Sur", descripcion: "Centro de distribución sur", ubicacion: "Escuintla", responsable: "Carlos López", activa: true, productosCount: 280, valorTotal: 68000, createdAt: new Date("2024-06-10").toISOString() },
-      { id: "b4", nombre: "Bodega Este", descripcion: null, ubicacion: "Zacapa", responsable: null, activa: true, productosCount: 150, valorTotal: 25200, createdAt: new Date("2024-09-05").toISOString() },
-      { id: "b5", nombre: "Bodega Temporal", descripcion: "Almacén para proyectos", ubicacion: "Antigua Guatemala", responsable: "Ana Martínez", activa: false, productosCount: 45, valorTotal: 8500, createdAt: new Date("2025-02-18").toISOString() },
-      { id: "b6", nombre: "Bodega Oeste", descripcion: "Nueva sucursal", ubicacion: "Quetzaltenango", responsable: "Pedro Ramírez", activa: true, productosCount: 95, valorTotal: 18200, createdAt: new Date("2025-07-01").toISOString() },
-    ];
-    setBodegas(mock);
+    const res = await api<BodegaItem[]>("/api/bodegas?limit=100");
+    if (res.success) setBodegas(res.data ?? []);
+    else toast.error(res.error);
     setLoading(false);
   }, []);
 
@@ -68,50 +62,56 @@ export default function BodegasPage() {
   const filtered = useMemo(() => {
     if (!search) return bodegas;
     const q = search.toLowerCase();
-    return bodegas.filter((b) => b.nombre.toLowerCase().includes(q) || (b.ubicacion && b.ubicacion.toLowerCase().includes(q)) || (b.responsable && b.responsable.toLowerCase().includes(q)));
+    return bodegas.filter((b) => b.nombre.toLowerCase().includes(q) || (b.direccion ?? "").toLowerCase().includes(q) || (b.encargado ?? "").toLowerCase().includes(q));
   }, [bodegas, search]);
 
   const stats = useMemo(() => ({
     total: bodegas.length,
     activas: bodegas.filter((b) => b.activa).length,
-    totalProductos: bodegas.reduce((s, b) => s + b.productosCount, 0),
+    totalProductos: bodegas.reduce((s, b) => s + b.inventarioCount, 0),
   }), [bodegas]);
 
   const openNew = () => {
     setEditingBodega(null);
-    setForm({ nombre: "", descripcion: "", ubicacion: "", responsable: "", activa: true });
+    setForm({ ...emptyForm });
     setDialogOpen(true);
   };
 
   const openEdit = (b: BodegaItem) => {
     setEditingBodega(b);
     setForm({
-      nombre: b.nombre, descripcion: b.descripcion || "",
-      ubicacion: b.ubicacion || "", responsable: b.responsable || "", activa: b.activa,
+      nombre: b.nombre, direccion: b.direccion || "", telefono: b.telefono || "",
+      encargado: b.encargado || "", activa: b.activa,
     });
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.nombre) { toast.error("El nombre es obligatorio"); return; }
-    if (editingBodega) {
-      setBodegas((prev) => prev.map((b) => b.id === editingBodega.id ? { ...b, ...form, descripcion: form.descripcion || null, ubicacion: form.ubicacion || null, responsable: form.responsable || null } : b));
-      toast.success(`Bodega ${form.nombre} actualizada`);
-    } else {
-      const newB: BodegaItem = {
-        id: `b-${Date.now()}`, ...form, descripcion: form.descripcion || null,
-        ubicacion: form.ubicacion || null, responsable: form.responsable || null,
-        productosCount: 0, valorTotal: 0, createdAt: new Date().toISOString(),
-      };
-      setBodegas((prev) => [...prev, newB]);
-      toast.success(`Bodega ${form.nombre} creada`);
-    }
-    setDialogOpen(false);
+    setSaving(true);
+    const payload = {
+      nombre: form.nombre,
+      direccion: form.direccion || null,
+      telefono: form.telefono || null,
+      encargado: form.encargado || null,
+      activa: form.activa,
+    };
+    const res = editingBodega
+      ? await api(`/api/bodegas/${editingBodega.id}`, { method: "PUT", body: payload })
+      : await api("/api/bodegas", { method: "POST", body: payload });
+    setSaving(false);
+    if (res.success) {
+      toast.success(editingBodega ? "Bodega actualizada" : "Bodega creada");
+      setDialogOpen(false);
+      fetchBodegas();
+    } else toast.error(res.error);
   };
 
-  const handleToggleActive = (b: BodegaItem) => {
-    setBodegas((prev) => prev.map((bo) => bo.id === b.id ? { ...bo, activa: !bo.activa } : bo));
-    toast.success(`${b.nombre} ${b.activa ? "desactivada" : "activada"}`);
+  const handleDelete = async (b: BodegaItem) => {
+    if (!confirm(`¿Eliminar la bodega "${b.nombre}"?`)) return;
+    const res = await api(`/api/bodegas/${b.id}`, { method: "DELETE" });
+    if (res.success) { toast.success(res.message ?? "Bodega eliminada"); fetchBodegas(); }
+    else toast.error(res.error);
   };
 
   if (loading) {
@@ -138,15 +138,12 @@ export default function BodegasPage() {
         {[
           { label: "Total Bodegas", value: stats.total, icon: Warehouse, color: "text-blue-400", bg: "bg-blue-500/10" },
           { label: "Bodegas Activas", value: stats.activas, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-          { label: "Total Productos", value: stats.totalProductos, icon: Package, color: "text-indigo-400", bg: "bg-indigo-500/10" },
+          { label: "Registros de Inventario", value: stats.totalProductos, icon: Package, color: "text-indigo-400", bg: "bg-indigo-500/10" },
         ].map((s) => (
           <Card key={s.label} className="border-white/[0.04] bg-[#0a0a2a]/60">
             <CardContent className="flex items-center gap-3 p-4">
               <div className={cn("rounded-lg p-2", s.bg)}><s.icon className={cn("h-5 w-5", s.color)} /></div>
-              <div>
-                <p className="text-xl font-bold text-white">{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-              </div>
+              <div><p className="text-xl font-bold text-white">{s.value}</p><p className="text-xs text-muted-foreground">{s.label}</p></div>
             </CardContent>
           </Card>
         ))}
@@ -167,12 +164,11 @@ export default function BodegasPage() {
                 <thead>
                   <tr className="border-b border-white/[0.04] text-left text-xs text-muted-foreground">
                     <th className="pb-3 pr-4 font-medium">Nombre</th>
-                    <th className="pb-3 pr-4 font-medium">Descripción</th>
-                    <th className="pb-3 pr-4 font-medium">Ubicación</th>
-                    <th className="pb-3 pr-4 font-medium">Responsable</th>
+                    <th className="pb-3 pr-4 font-medium">Dirección</th>
+                    <th className="pb-3 pr-4 font-medium">Teléfono</th>
+                    <th className="pb-3 pr-4 font-medium">Encargado</th>
                     <th className="pb-3 pr-4 font-medium">Estado</th>
-                    <th className="pb-3 pr-4 font-medium text-right">Productos</th>
-                    <th className="pb-3 pr-4 font-medium text-right">Valor Total</th>
+                    <th className="pb-3 pr-4 font-medium text-right">Inventario</th>
                     <th className="pb-3 pr-4 font-medium">Creado</th>
                     <th className="pb-3 pr-4 text-right font-medium">Acciones</th>
                   </tr>
@@ -181,29 +177,24 @@ export default function BodegasPage() {
                   {filtered.map((b) => (
                     <tr key={b.id} className="border-b border-white/[0.02] transition-colors hover:bg-white/[0.02]">
                       <td className="py-3 pr-4 font-medium text-white">{b.nombre}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{b.descripcion || "—"}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{b.ubicacion || "—"}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{b.responsable || "—"}</td>
-                      <td className="py-3 pr-4">
-                        <Badge variant={b.activa ? "success" : "default"} className="text-[10px]">
-                          {b.activa ? "Activa" : "Inactiva"}
-                        </Badge>
-                      </td>
-                      <td className="py-3 pr-4 text-right text-white">{b.productosCount}</td>
-                      <td className="py-3 pr-4 text-right font-medium text-white">{formatCurrency(b.valorTotal)}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{b.direccion || "—"}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{b.telefono || "—"}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{b.encargado || "—"}</td>
+                      <td className="py-3 pr-4"><Badge variant={b.activa ? "success" : "default"} className="text-[10px]">{b.activa ? "Activa" : "Inactiva"}</Badge></td>
+                      <td className="py-3 pr-4 text-right text-white">{b.inventarioCount}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{formatDate(b.createdAt)}</td>
                       <td className="py-3 pr-4 text-right">
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(b)}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Link href={`/inventario?bodega=${b.id}`}>
+                          <Link href={`/inventario`}>
                             <Button variant="ghost" size="icon" className="h-7 w-7"><Eye className="h-3.5 w-3.5" /></Button>
                           </Link>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleToggleActive(b)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300" onClick={() => handleDelete(b)}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </div>
                       </td>
                     </tr>
                   ))}
-                  {filtered.length === 0 && (<tr><td colSpan={9} className="py-12 text-center text-muted-foreground">No se encontraron bodegas</td></tr>)}
+                  {filtered.length === 0 && (<tr><td colSpan={8} className="py-12 text-center text-muted-foreground">No se encontraron bodegas</td></tr>)}
                 </tbody>
               </table>
             </div>
@@ -217,35 +208,28 @@ export default function BodegasPage() {
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="rounded-lg bg-blue-500/10 p-2.5">
-                        <Warehouse className="h-5 w-5 text-blue-400" />
-                      </div>
+                      <div className="rounded-lg bg-blue-500/10 p-2.5"><Warehouse className="h-5 w-5 text-blue-400" /></div>
                       <div>
                         <p className="font-medium text-white">{b.nombre}</p>
-                        <p className="text-xs text-muted-foreground">{b.ubicacion || "Sin ubicación"}</p>
+                        <p className="text-xs text-muted-foreground">{b.direccion || "Sin dirección"}</p>
                       </div>
                     </div>
                     <Badge variant={b.activa ? "success" : "default"} className="text-[10px]">{b.activa ? "Activa" : "Inactiva"}</Badge>
                   </div>
-                  {b.descripcion && <p className="mt-2 text-xs text-muted-foreground">{b.descripcion}</p>}
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-white/[0.02] p-2 text-center">
-                      <p className="text-lg font-bold text-white">{b.productosCount}</p>
-                      <p className="text-[10px] text-muted-foreground">Productos</p>
+                      <p className="text-lg font-bold text-white">{b.inventarioCount}</p>
+                      <p className="text-[10px] text-muted-foreground">Registros</p>
                     </div>
                     <div className="rounded-lg bg-white/[0.02] p-2 text-center">
-                      <p className="text-lg font-bold text-emerald-400">{formatCurrency(b.valorTotal)}</p>
-                      <p className="text-[10px] text-muted-foreground">Valor Total</p>
+                      <p className="truncate text-sm font-medium text-white">{b.encargado || "—"}</p>
+                      <p className="text-[10px] text-muted-foreground">Encargado</p>
                     </div>
                   </div>
                   <div className="mt-3 flex gap-1">
-                    <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => openEdit(b)}>
-                      <Pencil className="mr-1 h-3 w-3" />Editar
-                    </Button>
-                    <Link href={`/inventario?bodega=${b.id}`} className="flex-1">
-                      <Button variant="outline" size="sm" className="w-full text-xs">
-                        <Eye className="mr-1 h-3 w-3" />Inventario
-                      </Button>
+                    <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => openEdit(b)}><Pencil className="mr-1 h-3 w-3" />Editar</Button>
+                    <Link href={`/inventario`} className="flex-1">
+                      <Button variant="outline" size="sm" className="w-full text-xs"><Eye className="mr-1 h-3 w-3" />Inventario</Button>
                     </Link>
                   </div>
                 </CardContent>
@@ -267,16 +251,16 @@ export default function BodegasPage() {
               <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: Bodega Central" />
             </div>
             <div className="space-y-2">
-              <Label className="text-white">Descripción</Label>
-              <Input value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Descripción de la bodega" />
+              <Label className="text-white">Dirección</Label>
+              <Input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} placeholder="Dirección o ciudad" />
             </div>
             <div className="space-y-2">
-              <Label className="text-white">Ubicación</Label>
-              <Input value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} placeholder="Dirección o ciudad" />
+              <Label className="text-white">Teléfono</Label>
+              <Input value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} placeholder="5555-0000" />
             </div>
             <div className="space-y-2">
-              <Label className="text-white">Responsable</Label>
-              <Input value={form.responsable} onChange={(e) => setForm({ ...form, responsable: e.target.value })} placeholder="Nombre del encargado" />
+              <Label className="text-white">Encargado</Label>
+              <Input value={form.encargado} onChange={(e) => setForm({ ...form, encargado: e.target.value })} placeholder="Nombre del encargado" />
             </div>
             <div className="flex items-center justify-between rounded-lg bg-white/[0.02] p-3">
               <div>
@@ -288,7 +272,7 @@ export default function BodegasPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>{editingBodega ? "Guardar Cambios" : "Crear Bodega"}</Button>
+            <Button onClick={handleSave} loading={saving}>{editingBodega ? "Guardar Cambios" : "Crear Bodega"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
