@@ -149,7 +149,7 @@ export default function ConteosPage() {
       handleBarcodeScanned(barcode);
     },
     onError: (err) => {
-      toast.error("Error de esc\u00e1ner: " + err);
+      toast.error("Error de escáner: " + err);
     },
   });
 
@@ -167,7 +167,7 @@ export default function ConteosPage() {
         toast.error("Producto no incluido en este conteo");
       }
     } else {
-      toast.error(`C\u00f3digo no reconocido: ${barcode}`);
+      toast.error(`Código no reconocido: ${barcode}`);
     }
   }, [productos, conteoItems, isPaused]);
 
@@ -496,12 +496,12 @@ export default function ConteosPage() {
     doc.text("InvenPro", 14, 13);
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
-    doc.text("Sistema de Gesti\u00f3n de Inventario", 14, 18);
+    doc.text("Sistema de Gestión de Inventario", 14, 18);
 
     doc.setFontSize(12);
     doc.setTextColor(40, 40, 80);
     doc.setFont("helvetica", "bold");
-    doc.text("Reporte de Conteo F\u00edsico", 14, 30);
+    doc.text("Reporte de Conteo Físico", 14, 30);
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 120);
@@ -515,7 +515,7 @@ export default function ConteosPage() {
 
     doc.setFontSize(8);
     doc.setTextColor(60, 60, 80);
-    doc.text(`Total Sistema: ${totalSistema} | Total F\u00edsico: ${totalFisico} | Diferencias: ${itemsConDif.length} | Precisi\u00f3n: ${accuracy.toFixed(1)}%`, 14, 48);
+    doc.text(`Total Sistema: ${totalSistema} | Total Físico: ${totalFisico} | Diferencias: ${itemsConDif.length} | Precisión: ${accuracy.toFixed(1)}%`, 14, 48);
 
     const tableRows = items.map((item) => [
       item.producto?.codigo || "N/A",
@@ -528,7 +528,7 @@ export default function ConteosPage() {
 
     (doc as any).autoTable({
       startY: 54,
-      head: [["C\u00f3digo", "Producto", "Cant. Sistema", "Cant. F\u00edsica", "Diferencia", "Estado"]],
+      head: [["Código", "Producto", "Cant. Sistema", "Cant. Física", "Diferencia", "Estado"]],
       body: tableRows,
       styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" },
       headStyles: { fillColor: [15, 15, 46], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -541,7 +541,7 @@ export default function ConteosPage() {
         doc.setFontSize(7);
         doc.setTextColor(130, 130, 150);
         doc.setFont("helvetica", "normal");
-        doc.text(`P\u00e1gina ${pageNum} de ${totalPages}`, pageWidth - 25, pageHeight - 8, { align: "right" });
+        doc.text(`Página ${pageNum} de ${totalPages}`, pageWidth - 25, pageHeight - 8, { align: "right" });
         doc.text("InvenPro - Reporte de Conteo", 10, pageHeight - 8);
       },
     });
@@ -557,7 +557,7 @@ export default function ConteosPage() {
       doc.text("Resumen", 14, summaryY);
       doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
-      doc.text(`Total Sistema: ${totalSistema}  |  Total F\u00edsico: ${totalFisico}  |  Diferencia Neta: ${totalFisico - totalSistema}  |  Precisi\u00f3n: ${accuracy.toFixed(1)}%`, 14, summaryY + 7);
+      doc.text(`Total Sistema: ${totalSistema}  |  Total Físico: ${totalFisico}  |  Diferencia Neta: ${totalFisico - totalSistema}  |  Precisión: ${accuracy.toFixed(1)}%`, 14, summaryY + 7);
       doc.text(`Items con diferencias: ${itemsConDif.length} de ${items.length}`, 14, summaryY + 13);
     }
 
@@ -578,7 +578,7 @@ export default function ConteosPage() {
     }
 
     let csv = "\uFEFF";
-    csv += '"C\u00f3digo","Producto","Cant. Sistema","Cant. F\u00edsica","Diferencia","Estado"\n';
+    csv += '"Código","Producto","Cant. Sistema","Cant. Física","Diferencia","Estado"\n';
 
     for (const item of items) {
       const estado = item.diferencia !== 0 ? (item.diferencia > 0 ? "SOBRANTE" : "FALTANTE") : "OK";
@@ -660,10 +660,10 @@ export default function ConteosPage() {
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-3">
               <ClipboardCheck className="h-7 w-7 text-indigo-400" />
-              Conteos F\u00edsicos
+              Conteos Físicos
             </h1>
             <p className="mt-1 text-sm text-white/60">
-              Gesti\u00f3n de inventarios f\u00edsicos, conciliaci\u00f3n y ajustes
+              Gestión de inventarios físicos, conciliación y ajustes
             </p>
           </div>
           <Button onClick={() => setShowCreateModal(true)} className="bg-indigo-500 hover:bg-indigo-600">
@@ -845,10 +845,10 @@ export default function ConteosPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
               <ClipboardList className="h-5 w-5 text-indigo-400" />
-              Nuevo Conteo F\u00edsico
+              Nuevo Conteo Físico
             </DialogTitle>
             <DialogDescription>
-              Configure los par\u00e1metros para iniciar un nuevo conteo de inventario
+              Configure los parámetros para iniciar un nuevo conteo de inventario
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={createForm.handleSubmit(handleCreateConteo)} className="space-y-4">
@@ -981,7 +981,7 @@ export default function ConteosPage() {
               <div className="text-lg font-bold text-red-400">{executeStats.diffs}</div>
             </div>
             <div className="text-center">
-              <div className="text-xs text-white/50">Precisi\u00f3n</div>
+              <div className="text-xs text-white/50">Precisión</div>
               <div className="text-lg font-bold text-indigo-400">{executeStats.accuracy.toFixed(1)}%</div>
             </div>
           </div>
@@ -994,7 +994,7 @@ export default function ConteosPage() {
               <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
               <Input
                 ref={barcodeInputRef}
-                placeholder={showCamera ? "C\u00e1mara activa - escanee c\u00f3digo..." : "Escanear c\u00f3digo de barras o escriba el c\u00f3digo..."}
+                placeholder={showCamera ? "Cámara activa - escanee código..." : "Escanear código de barras o escriba el código..."}
                 className="pl-10"
                 value={manualBarcode}
                 onChange={(e) => setManualBarcode(e.target.value)}
@@ -1030,7 +1030,7 @@ export default function ConteosPage() {
               }}
             >
               <Camera className="mr-2 h-4 w-4" />
-              {barcodeScanner.isScanning ? "Detener" : "C\u00e1mara"}
+              {barcodeScanner.isScanning ? "Detener" : "Cámara"}
             </Button>
           </div>
 
@@ -1082,7 +1082,7 @@ export default function ConteosPage() {
                       <div className="text-2xl font-bold text-indigo-400">{currentItem.cantidadSistema}</div>
                     </div>
                     <div className="rounded-lg bg-white/[0.02] p-3">
-                      <div className="text-xs text-white/50">Cantidad F\u00edsica</div>
+                      <div className="text-xs text-white/50">Cantidad Física</div>
                       <Input
                         type="number"
                         min={0}
@@ -1161,7 +1161,7 @@ export default function ConteosPage() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-white/30">
                   <Package className="mb-4 h-16 w-16" />
-                  <p>Escanea un c\u00f3digo de barras</p>
+                  <p>Escanea un código de barras</p>
                   <p className="text-sm">o selecciona un producto de la lista</p>
                 </div>
               )}
@@ -1227,10 +1227,10 @@ export default function ConteosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-white/60">C\u00f3digo</TableHead>
+                  <TableHead className="text-white/60">Código</TableHead>
                   <TableHead className="text-white/60">Producto</TableHead>
                   <TableHead className="text-right text-white/60">Sistema</TableHead>
-                  <TableHead className="text-right text-white/60">F\u00edsico</TableHead>
+                  <TableHead className="text-right text-white/60">Físico</TableHead>
                   <TableHead className="text-right text-white/60">Diferencia</TableHead>
                   <TableHead className="text-white/60">Notas</TableHead>
                 </TableRow>
@@ -1298,7 +1298,7 @@ export default function ConteosPage() {
                     <div className="text-xl font-bold text-white">{totalSistema}</div>
                   </Card>
                   <Card className="bg-white/[0.02] p-3">
-                    <div className="text-xs text-white/50">F\u00edsico Total</div>
+                    <div className="text-xs text-white/50">Físico Total</div>
                     <div className="text-xl font-bold text-white">{totalFisico}</div>
                   </Card>
                   <Card className="bg-white/[0.02] p-3">
@@ -1306,7 +1306,7 @@ export default function ConteosPage() {
                     <div className="text-xl font-bold text-amber-400">{itemsWithDiff.length}</div>
                   </Card>
                   <Card className="bg-white/[0.02] p-3">
-                    <div className="text-xs text-emerald-400">Precisi\u00f3n</div>
+                    <div className="text-xs text-emerald-400">Precisión</div>
                     <div className="text-xl font-bold text-emerald-400">{accuracy.toFixed(1)}%</div>
                   </Card>
                 </div>
@@ -1320,7 +1320,7 @@ export default function ConteosPage() {
                           <TableRow>
                             <TableHead className="text-white/60">Producto</TableHead>
                             <TableHead className="text-right text-white/60">Sistema</TableHead>
-                            <TableHead className="text-right text-white/60">F\u00edsico</TableHead>
+                            <TableHead className="text-right text-white/60">Físico</TableHead>
                             <TableHead className="text-right text-white/60">Diferencia</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -1378,14 +1378,14 @@ export default function ConteosPage() {
               Conciliar Conteo
             </DialogTitle>
             <DialogDescription>
-              Se crear\u00e1n movimientos de ajuste para las diferencias encontradas.
-              Esta acci\u00f3n actualiza el inventario permanentemente.
+              Se crearán movimientos de ajuste para las diferencias encontradas.
+              Esta acción actualiza el inventario permanentemente.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
             <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-400">
               <AlertTriangle className="mr-2 inline h-4 w-4" />
-              Al conciliar se crear\u00e1n movimientos de tipo CONTEO_DIFERENCIA para cada diferencia.
+              Al conciliar se crearán movimientos de tipo CONTEO_DIFERENCIA para cada diferencia.
             </div>
           </div>
           <DialogFooter>

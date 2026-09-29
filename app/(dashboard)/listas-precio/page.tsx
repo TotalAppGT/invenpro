@@ -29,7 +29,7 @@ interface Lista {
   clientesCount: number;
 }
 
-const emptyForm = { nombre: "", tipo: "BASE", moneda: "GTQ", margen: 0, esDefecto: false, activa: true };
+const emptyForm = { nombre: "", tipo: "BASE", moneda: "Q", margen: 0, esDefecto: false, activa: true };
 
 export default function ListasPrecioPage() {
   const [loading, setLoading] = useState(true);

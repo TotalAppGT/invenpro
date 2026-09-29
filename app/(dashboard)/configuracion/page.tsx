@@ -381,8 +381,6 @@ export default function ConfiguracionPage() {
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Q">Quetzal (Q) - Guatemala</SelectItem>
-                          <SelectItem value="$">Dólar ($) - USD</SelectItem>
-                          <SelectItem value="€">Euro (€)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

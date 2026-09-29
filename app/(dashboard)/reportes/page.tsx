@@ -60,23 +60,23 @@ const EMPTY_ROW: ReportRow = {
 const reportTypes: ReportConfig[] = [
   { type: "inventario", label: "Inventario General", description: "Reporte completo del inventario por bodega", icon: <ClipboardList className="h-6 w-6" />, color: "text-blue-400" },
   { type: "movimientos", label: "Movimientos", description: "Historial de entradas, salidas y ajustes", icon: <ArrowLeftRight className="h-6 w-6" />, color: "text-emerald-400" },
-  { type: "catalogo", label: "Cat\u00e1logo de Productos", description: "Listado completo de productos con precios", icon: <Package className="h-6 w-6" />, color: "text-indigo-400" },
-  { type: "stock_bajo", label: "Alerta de Stock Bajo", description: "Productos bajo el nivel m\u00ednimo de inventario", icon: <AlertTriangle className="h-6 w-6" />, color: "text-amber-400" },
+  { type: "catalogo", label: "Catálogo de Productos", description: "Listado completo de productos con precios", icon: <Package className="h-6 w-6" />, color: "text-indigo-400" },
+  { type: "stock_bajo", label: "Alerta de Stock Bajo", description: "Productos bajo el nivel mínimo de inventario", icon: <AlertTriangle className="h-6 w-6" />, color: "text-amber-400" },
 ];
 
 const bodegas = ["TODAS", "Bodega Central", "Bodega Norte", "Bodega Sur", "Bodega Este"];
-const categorias = ["TODAS", "Ferreter\u00eda", "Electr\u00f3nicos", "Construcci\u00f3n", "Papeler\u00eda", "Pintura"];
+const categorias = ["TODAS", "Ferretería", "Electrónicos", "Construcción", "Papelería", "Pintura"];
 
 const REPORT_LABELS: Record<ReportType, string> = {
   inventario: "Inventario General",
   movimientos: "Movimientos",
-  catalogo: "Cat\u00e1logo de Productos",
+  catalogo: "Catálogo de Productos",
   stock_bajo: "Alerta de Stock Bajo",
 };
 
 const REPORT_COLUMNS: Record<ReportType, PDFColumn[]> = {
   inventario: [
-    { header: "C\u00f3digo", dataKey: "col1" },
+    { header: "Código", dataKey: "col1" },
     { header: "Producto", dataKey: "col2" },
     { header: "Bodega", dataKey: "col3" },
     { header: "Cantidad", dataKey: "col4" },
@@ -90,18 +90,18 @@ const REPORT_COLUMNS: Record<ReportType, PDFColumn[]> = {
     { header: "Bodega", dataKey: "col5" },
   ],
   catalogo: [
-    { header: "C\u00f3digo", dataKey: "col1" },
+    { header: "Código", dataKey: "col1" },
     { header: "Producto", dataKey: "col2" },
-    { header: "Categor\u00eda", dataKey: "col3" },
+    { header: "Categoría", dataKey: "col3" },
     { header: "Precio", dataKey: "col4" },
     { header: "Estado", dataKey: "col5" },
   ],
   stock_bajo: [
-    { header: "C\u00f3digo", dataKey: "col1" },
+    { header: "Código", dataKey: "col1" },
     { header: "Producto", dataKey: "col2" },
     { header: "Bodega", dataKey: "col3" },
     { header: "Stock Actual", dataKey: "col4" },
-    { header: "Stock M\u00edn", dataKey: "col5" },
+    { header: "Stock Mín", dataKey: "col5" },
   ],
 };
 
@@ -252,7 +252,7 @@ export default function ReportesPage() {
       setErrorMessage(json.error || "No se encontraron datos para este reporte");
     } catch (err) {
       console.error("Error fetching report data:", err);
-      setErrorMessage("Error de conexi\u00f3n al obtener datos del reporte");
+      setErrorMessage("Error de conexión al obtener datos del reporte");
     }
     return generateMockData();
   }, [selectedReport, bodegaFilter, dateFrom, dateTo, tipoMov, categoryFilter]);
@@ -343,7 +343,7 @@ export default function ReportesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-white">Reportes</h1>
-        <p className="text-sm text-muted-foreground">Generaci\u00f3n de reportes y exportaci\u00f3n de datos</p>
+        <p className="text-sm text-muted-foreground">Generación de reportes y exportación de datos</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -372,7 +372,7 @@ export default function ReportesPage() {
 
       <Card className="border-white/[0.04] bg-[#0a0a2a]/60">
         <CardHeader>
-          <CardTitle className="text-white">Configuraci\u00f3n del Reporte</CardTitle>
+          <CardTitle className="text-white">Configuración del Reporte</CardTitle>
           <CardDescription>{reportTypes.find((r) => r.type === selectedReport)?.label}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -450,7 +450,7 @@ export default function ReportesPage() {
 
             {selectedReport === "catalogo" && (
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Categor\u00eda</Label>
+                <Label className="text-xs text-muted-foreground">Categoría</Label>
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}

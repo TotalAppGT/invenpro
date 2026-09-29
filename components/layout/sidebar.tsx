@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/providers";
@@ -54,6 +54,7 @@ const LogoBrand = () => (
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, isAdmin, isSupervisor } = useAuth();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -133,13 +134,20 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     }), [navGroups, isAdmin, isSupervisor]);
 
   const isActive = useCallback((href: string) => {
-    if (href === "/dashboard") return pathname === "/dashboard";
-    if (href.includes("?")) {
-      const base = href.split("?")[0];
-      return pathname.startsWith(base);
+    const [base, query] = href.split("?");
+    if (query) {
+      if (pathname !== base) return false;
+      const params = new URLSearchParams(query);
+      let ok = true;
+      params.forEach((value, key) => {
+        if (searchParams.get(key) !== value) ok = false;
+      });
+      return ok;
     }
-    return pathname.startsWith(href);
-  }, [pathname]);
+    // /productos con una pestaña abierta (ej. categorías) no marca "Productos"
+    if (base === "/productos" && searchParams.get("tab")) return false;
+    return pathname === base;
+  }, [pathname, searchParams]);
 
   const sidebarContent = (
     <div className="flex h-full flex-col">

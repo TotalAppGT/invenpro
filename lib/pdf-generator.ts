@@ -61,7 +61,7 @@ export function generatePDF(options: GeneratePDFOptions): void {
   doc.text(companyName, 14, 13);
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
-  doc.text("Sistema de Gesti\u00f3n de Inventario", 14, 18);
+  doc.text("Sistema de Gestión de Inventario", 14, 18);
 
   doc.setFontSize(11);
   doc.setTextColor(40, 40, 80);
@@ -116,7 +116,7 @@ export function generatePDF(options: GeneratePDFOptions): void {
           doc.setFontSize(7);
           doc.setTextColor(130, 130, 150);
           doc.setFont("helvetica", "normal");
-          doc.text(`P\u00e1gina ${pageNum} de ${totalPages}`, pageWidth - 25, pageHeight - 8, {
+          doc.text(`Página ${pageNum} de ${totalPages}`, pageWidth - 25, pageHeight - 8, {
             align: "right",
           });
           doc.text(`${companyName} - Reporte`, 10, pageHeight - 8);

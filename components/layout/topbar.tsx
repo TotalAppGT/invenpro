@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/providers";
-import { getInitials } from "@/lib/utils";
+import { getInitials, formatRelativeTime } from "@/lib/utils";
+import { api } from "@/lib/api-client";
 import {
   Menu,
   Bell,
@@ -26,10 +27,17 @@ const breadcrumbMap: Record<string, string> = {
   productos: "Productos",
   bodegas: "Bodegas",
   inventario: "Inventario",
+  ubicaciones: "Ubicaciones",
+  series: "Números de Serie",
   categorias: "Categorías",
   movimientos: "Movimientos",
   kardex: "Kardex",
   conteos: "Conteos",
+  ajustes: "Ajustes",
+  devoluciones: "Devoluciones",
+  "compras-sugeridas": "Compras Sugeridas",
+  "listas-precio": "Listas de Precios",
+  clientes: "Clientes",
   etiquetas: "Etiquetas",
   proveedores: "Proveedores",
   reportes: "Reportes",
@@ -39,6 +47,14 @@ const breadcrumbMap: Record<string, string> = {
   alertas: "Alertas",
   perfil: "Perfil",
 };
+
+interface AlertaItem {
+  id: string;
+  tipo: string;
+  mensaje: string;
+  activa: boolean;
+  createdAt: string;
+}
 
 function generateBreadcrumbs(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
@@ -62,7 +78,20 @@ export function Topbar({
   const { theme, setTheme } = useTheme();
   const { user, logout, isAdmin, tenant } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [notifCount] = useState(3);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [alertas, setAlertas] = useState<AlertaItem[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    api<AlertaItem[]>("/api/alertas?limit=8").then((res) => {
+      if (mounted && res.success) setAlertas(res.data ?? []);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const alertasActivas = useMemo(() => alertas.filter((a) => a.activa), [alertas]);
 
   const breadcrumbs = useMemo(() => generateBreadcrumbs(pathname), [pathname]);
 
@@ -140,14 +169,75 @@ export function Topbar({
       </button>
 
       {/* Notifications */}
-      <button className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-white">
-        <Bell className="h-4 w-4" />
-        {notifCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-            {notifCount}
-          </span>
-        )}
-      </button>
+      <div className="relative">
+        <button
+          onClick={() => setNotifOpen(!notifOpen)}
+          className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-white"
+          aria-label="Notificaciones"
+        >
+          <Bell className="h-4 w-4" />
+          {alertasActivas.length > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+              {alertasActivas.length > 9 ? "9+" : alertasActivas.length}
+            </span>
+          )}
+        </button>
+
+        <AnimatePresence>
+          {notifOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-40"
+                onClick={() => setNotifOpen(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-white/[0.06] bg-[#0f0f2e] shadow-2xl shadow-black/40"
+              >
+                <div className="flex items-center justify-between border-b border-white/[0.04] px-4 py-3">
+                  <p className="text-sm font-medium text-white">Notificaciones</p>
+                  <span className="text-[10px] text-muted-foreground">{alertasActivas.length} activas</span>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {alertasActivas.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+                      No tienes notificaciones
+                    </div>
+                  ) : (
+                    alertasActivas.slice(0, 6).map((a) => (
+                      <div key={a.id} className="flex gap-3 border-b border-white/[0.02] px-4 py-3 hover:bg-white/[0.02]">
+                        <span className={cn(
+                          "mt-1 h-2 w-2 shrink-0 rounded-full",
+                          a.tipo === "STOCK_BAJO" ? "bg-amber-400" : a.tipo === "VENCIMIENTO" ? "bg-red-400" : "bg-indigo-400"
+                        )} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs text-white">{a.mensaje}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {a.tipo.replace("_", " ")} · {formatRelativeTime(a.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <Link
+                  href="/alertas"
+                  onClick={() => setNotifOpen(false)}
+                  className="block border-t border-white/[0.04] px-4 py-2.5 text-center text-xs font-medium text-indigo-400 transition-colors hover:bg-white/[0.03]"
+                >
+                  Ver todas las alertas
+                </Link>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* User menu */}
       <div className="relative">

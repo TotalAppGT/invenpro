@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,52 +9,46 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { api } from "@/lib/api-client";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import {
-  Search,
-  Filter,
-  Download,
-  FileText,
-  Eye,
-  ArrowLeftRight,
-  Pencil,
-  Trash2,
-  Scan,
-  ChevronLeft,
-  ChevronRight,
-  Package,
-  DollarSign,
-  AlertTriangle,
-  PackageX,
-  CheckCircle,
+  Search, FileText, Eye, ArrowLeftRight, Pencil, ChevronLeft, ChevronRight,
+  Package, DollarSign, AlertTriangle, PackageX, BookOpen,
 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
+interface InvProducto {
+  id: string;
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  unidadMedida: string;
+  costoUnit: number;
+  precioUnit: number;
+  stockMin: number;
+  stockMax: number;
+  codigoBarras: string | null;
+  sku: string | null;
+  categoria: { id: string; nombre: string };
+  proveedor: { id: string; nombre: string } | null;
+}
 
 interface InventoryItem {
   id: string;
-  codigo: string;
-  producto: string;
-  categoria: string;
-  bodega: string;
+  bodegaId: string;
+  bodega: { id: string; nombre: string };
+  productoId: string;
+  producto: InvProducto;
   cantidad: number;
-  unidad: string;
-  costoUnit: number;
-  precioUnit: number;
-  valorTotal: number;
-  stockMin: number;
-  estado: "NORMAL" | "BAJO" | "AGOTADO";
   lote: string;
-  vencimiento: string | null;
+  fechaVencimiento: string | null;
+  valorTotal: number;
+  stockStatus: "normal" | "bajo" | "sin";
 }
 
-const estadoVariant: Record<string, "success" | "warning" | "destructive"> = {
-  NORMAL: "success", BAJO: "warning", AGOTADO: "destructive",
+const estadoMap: Record<string, { label: string; variant: "success" | "warning" | "destructive" }> = {
+  normal: { label: "Normal", variant: "success" },
+  bajo: { label: "Bajo", variant: "warning" },
+  sin: { label: "Agotado", variant: "destructive" },
 };
 
 export default function InventarioPage() {
@@ -67,73 +60,57 @@ export default function InventarioPage() {
   const [categoryFilter, setCategoryFilter] = useState("TODAS");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [detailItem, setDetailItem] = useState<InventoryItem | null>(null);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
   const [adjustCantidad, setAdjustCantidad] = useState(0);
+  const [adjustMotivo, setAdjustMotivo] = useState("");
+  const [saving, setSaving] = useState(false);
   const perPage = 20;
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    const mock: InventoryItem[] = Array.from({ length: 67 }, (_, i) => {
-      const categorias = ["Ferretería", "Electrónicos", "Construcción", "Papelería", "Pintura", "Plomería"];
-      const bodegas = ["Bodega Central", "Bodega Norte", "Bodega Sur", "Bodega Este"];
-      const prodNames = ["Tornillo 3/4\"", "Cemento Portland", "Laptop HP", "Papel Bond A4", "Martillo 16oz", "Pintura Blanca", "Mouse Inalámbrico", "Destornillador", "Cable HDMI", "Clavos 2\""];
-      const cantidad = i % 3 === 0 ? 0 : i % 5 === 0 ? Math.floor(Math.random() * 5) + 1 : Math.floor(Math.random() * 200) + 10;
-      const min = Math.floor(Math.random() * 10) + 5;
-      let estado: "NORMAL" | "BAJO" | "AGOTADO" = "NORMAL";
-      if (cantidad === 0) estado = "AGOTADO";
-      else if (cantidad <= min) estado = "BAJO";
-      const costo = Math.round((Math.random() * 500 + 10) * 100) / 100;
-      const precio = Math.round(costo * (1 + Math.random() * 0.5) * 100) / 100;
-      return {
-        id: `inv-${i + 1}`,
-        codigo: `PRD-${String(i + 1).padStart(4, "0")}`,
-        producto: prodNames[i % prodNames.length],
-        categoria: categorias[i % categorias.length],
-        bodega: bodegas[i % bodegas.length],
-        cantidad,
-        unidad: "UNIDAD",
-        costoUnit: costo,
-        precioUnit: precio,
-        valorTotal: Math.round(cantidad * costo * 100) / 100,
-        stockMin: min,
-        estado,
-        lote: `L${String(i + 1).padStart(3, "0")}`,
-        vencimiento: i % 4 === 0 ? new Date(Date.now() + (Math.random() * 365 * 86400000)).toISOString() : null,
-      };
-    });
-    setItems(mock);
+    const res = await api<InventoryItem[]>("/api/inventario?limit=100");
+    if (res.success) setItems(res.data ?? []);
+    else toast.error(res.error);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  const bodegas = useMemo(() => [...new Set(items.map((i) => i.bodega))].sort(), [items]);
-  const categorias = useMemo(() => [...new Set(items.map((i) => i.categoria))].sort(), [items]);
+  const bodegas = useMemo(() => {
+    const map = new Map<string, string>();
+    items.forEach((i) => map.set(i.bodegaId, i.bodega.nombre));
+    return Array.from(map.entries()).map(([id, nombre]) => ({ id, nombre }));
+  }, [items]);
+
+  const categorias = useMemo(() => [...new Set(items.map((i) => i.producto.categoria?.nombre).filter(Boolean))].sort(), [items]);
 
   const filtered = useMemo(() => {
     let result = [...items];
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter((i) => i.producto.toLowerCase().includes(q) || i.codigo.toLowerCase().includes(q) || i.lote.toLowerCase().includes(q));
+      result = result.filter((i) =>
+        i.producto.nombre.toLowerCase().includes(q) ||
+        i.producto.codigo.toLowerCase().includes(q) ||
+        i.lote.toLowerCase().includes(q) ||
+        (i.producto.codigoBarras ?? "").toLowerCase().includes(q)
+      );
     }
-    if (bodegaFilter !== "TODAS") result = result.filter((i) => i.bodega === bodegaFilter);
-    if (statusFilter !== "TODOS") {
-      result = result.filter((i) => statusFilter === "BAJO" ? i.estado === "BAJO" : statusFilter === "AGOTADO" ? i.estado === "AGOTADO" : i.estado === "NORMAL");
-    }
-    if (categoryFilter !== "TODAS") result = result.filter((i) => i.categoria === categoryFilter);
+    if (bodegaFilter !== "TODAS") result = result.filter((i) => i.bodegaId === bodegaFilter);
+    if (statusFilter !== "TODOS") result = result.filter((i) => i.stockStatus === statusFilter.toLowerCase());
+    if (categoryFilter !== "TODAS") result = result.filter((i) => i.producto.categoria?.nombre === categoryFilter);
     return result;
   }, [items, search, bodegaFilter, statusFilter, categoryFilter]);
 
   const stats = useMemo(() => ({
     total: filtered.length,
     valorTotal: filtered.reduce((s, i) => s + i.valorTotal, 0),
-    bajoStock: filtered.filter((i) => i.estado === "BAJO").length,
-    sinStock: filtered.filter((i) => i.estado === "AGOTADO").length,
+    bajoStock: filtered.filter((i) => i.stockStatus === "bajo").length,
+    sinStock: filtered.filter((i) => i.stockStatus === "sin").length,
   }), [filtered]);
 
-  const totalPages = Math.ceil(filtered.length / perPage);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
   const toggleSelect = (id: string) => {
@@ -145,34 +122,55 @@ export default function InventarioPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === paginated.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(paginated.map((i) => i.id)));
-    }
+    if (selectedIds.size === paginated.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(paginated.map((i) => i.id)));
   };
 
-  const handleAdjust = (item: InventoryItem) => {
+  const openAdjust = (item: InventoryItem) => {
     setAdjustItem(item);
-    setAdjustCantidad(0);
+    setAdjustCantidad(item.cantidad);
+    setAdjustMotivo("");
     setAdjustDialogOpen(true);
   };
 
-  const confirmAdjust = () => {
-    if (adjustItem) {
-      setItems((prev) => prev.map((i) => i.id === adjustItem.id ? { ...i, cantidad: i.cantidad + adjustCantidad, valorTotal: (i.cantidad + adjustCantidad) * i.costoUnit, estado: ((i.cantidad + adjustCantidad) === 0 ? "AGOTADO" : (i.cantidad + adjustCantidad) <= i.stockMin ? "BAJO" : "NORMAL") as any } : i));
-      toast.success(`Stock de ${adjustItem.producto} ajustado (+${adjustCantidad})`);
-    }
-    setAdjustDialogOpen(false);
+  const confirmAdjust = async () => {
+    if (!adjustItem) return;
+    setSaving(true);
+    const res = await api("/api/inventario/ajuste", {
+      method: "POST",
+      body: {
+        productoId: adjustItem.productoId,
+        bodegaId: adjustItem.bodegaId,
+        cantidad: Number(adjustCantidad) || 0,
+        costoUnit: adjustItem.producto.costoUnit,
+        motivo: adjustMotivo || "Ajuste manual desde inventario",
+      },
+    });
+    setSaving(false);
+    if (res.success) {
+      toast.success("Inventario ajustado");
+      setAdjustDialogOpen(false);
+      fetchItems();
+    } else toast.error(res.error);
   };
 
-  const handleDelete = (item: InventoryItem) => {
-    setItems((prev) => prev.filter((i) => i.id !== item.id));
-    toast.success(`${item.producto} eliminado del inventario`);
+  const exportCSV = () => {
+    const header = "Codigo,Producto,Categoria,Bodega,Cantidad,Unidad,Costo,Precio,ValorTotal,StockMin,Estado,Lote,Vencimiento\n";
+    const rows = filtered.map((i) => [
+      i.producto.codigo, i.producto.nombre.replace(/,/g, " "), i.producto.categoria?.nombre ?? "",
+      i.bodega.nombre, i.cantidad, i.producto.unidadMedida, Number(i.producto.costoUnit).toFixed(2),
+      Number(i.producto.precioUnit).toFixed(2), i.valorTotal.toFixed(2), i.producto.stockMin,
+      estadoMap[i.stockStatus].label, i.lote || "", i.fechaVencimiento ? formatDate(i.fechaVencimiento) : "",
+    ].join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `inventario_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado");
   };
-
-  const handleExportPDF = () => toast.success("Exportando a PDF...");
-  const handleExportExcel = () => toast.success("Exportando a Excel...");
 
   if (loading) {
     return (<div className="space-y-6">
@@ -187,18 +185,17 @@ export default function InventarioPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Inventario</h1>
-          <p className="text-sm text-muted-foreground">Gestión de inventario por bodega</p>
+          <p className="text-sm text-muted-foreground">Existencias por bodega, costo y valorización</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportPDF}><FileText className="mr-1 h-3.5 w-3.5" />PDF</Button>
-          <Button variant="outline" size="sm" onClick={handleExportExcel}><FileText className="mr-1 h-3.5 w-3.5" />Excel</Button>
-          <Button variant="outline" size="sm"><Scan className="mr-1 h-3.5 w-3.5" />Escanear</Button>
+          <Button variant="outline" size="sm" onClick={exportCSV}><FileText className="mr-1 h-3.5 w-3.5" />Exportar CSV</Button>
+          <Button variant="outline" size="sm" onClick={() => toast.info("Módulo de escaneo en /conteos")}><Search className="mr-1 h-3.5 w-3.5" />Escanear</Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: "Total Items", value: stats.total, icon: Package, color: "text-blue-400", bg: "bg-blue-500/10" },
+          { label: "Items en Bodega", value: stats.total, icon: Package, color: "text-blue-400", bg: "bg-blue-500/10" },
           { label: "Valor Total", value: formatCurrency(stats.valorTotal), icon: DollarSign, color: "text-emerald-400", bg: "bg-emerald-500/10" },
           { label: "Stock Bajo", value: stats.bajoStock, icon: AlertTriangle, color: "text-amber-400", bg: "bg-amber-500/10" },
           { label: "Sin Stock", value: stats.sinStock, icon: PackageX, color: "text-red-400", bg: "bg-red-500/10" },
@@ -206,10 +203,7 @@ export default function InventarioPage() {
           <Card key={s.label} className="border-white/[0.04] bg-[#0a0a2a]/60">
             <CardContent className="flex items-center gap-3 p-4">
               <div className={cn("rounded-lg p-2", s.bg)}><s.icon className={cn("h-5 w-5", s.color)} /></div>
-              <div>
-                <p className="text-xl font-bold text-white">{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-              </div>
+              <div><p className="text-xl font-bold text-white">{s.value}</p><p className="text-xs text-muted-foreground">{s.label}</p></div>
             </CardContent>
           </Card>
         ))}
@@ -220,26 +214,25 @@ export default function InventarioPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[200px] flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Buscar por código, producto o lote..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
+              <Input placeholder="Buscar por código, producto, lote o código de barras..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-9" />
             </div>
             <select value={bodegaFilter} onChange={(e) => { setBodegaFilter(e.target.value); setPage(1); }} className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
               <option value="TODAS">Todas las bodegas</option>
-              {bodegas.map((b) => <option key={b} value={b}>{b}</option>)}
+              {bodegas.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
             </select>
             <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
               <option value="TODOS">Todos los estados</option>
               <option value="NORMAL">Normal</option>
               <option value="BAJO">Bajo Stock</option>
-              <option value="AGOTADO">Sin Stock</option>
+              <option value="SIN">Sin Stock</option>
             </select>
             <select value={categoryFilter} onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }} className="rounded-lg border border-white/[0.06] bg-[#0f0f2e] px-3 py-2 text-sm text-white">
               <option value="TODAS">Todas las categorías</option>
-              {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+              {categorias.map((c) => <option key={c as string} value={c as string}>{c as string}</option>)}
             </select>
             {selectedIds.size > 0 && (
               <div className="flex gap-1">
-                <Button size="sm" variant="outline" onClick={() => toast.info("Mover seleccionados")}><ArrowLeftRight className="mr-1 h-3.5 w-3.5" />Mover ({selectedIds.size})</Button>
-                <Button size="sm" variant="outline" onClick={() => toast.info("Ajustar seleccionados")}><Pencil className="mr-1 h-3.5 w-3.5" />Ajustar</Button>
+                <Button size="sm" variant="outline" onClick={() => toast.info("Selecciona una fila para ajustar")}><ArrowLeftRight className="mr-1 h-3.5 w-3.5" />Mover ({selectedIds.size})</Button>
               </div>
             )}
           </div>
@@ -270,43 +263,38 @@ export default function InventarioPage() {
                 {paginated.map((item) => (
                   <tr key={item.id} className="border-b border-white/[0.02] transition-colors hover:bg-white/[0.02]">
                     <td className="py-3 pr-2"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} className="rounded border-white/20 bg-transparent" /></td>
-                    <td className="py-3 pr-4 font-mono text-xs text-indigo-400">{item.codigo}</td>
-                    <td className="py-3 pr-4 font-medium text-white">{item.producto}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{item.categoria}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{item.bodega}</td>
+                    <td className="py-3 pr-4 font-mono text-xs text-indigo-400">{item.producto.codigo}</td>
+                    <td className="py-3 pr-4 font-medium text-white">{item.producto.nombre}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{item.producto.categoria?.nombre ?? "—"}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{item.bodega.nombre}</td>
                     <td className="py-3 pr-4 text-right text-white">{item.cantidad}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{item.unidad}</td>
-                    <td className="py-3 pr-4 text-right text-muted-foreground">{formatCurrency(item.costoUnit)}</td>
-                    <td className="py-3 pr-4 text-right text-muted-foreground">{formatCurrency(item.precioUnit)}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{item.producto.unidadMedida}</td>
+                    <td className="py-3 pr-4 text-right text-muted-foreground">{formatCurrency(item.producto.costoUnit)}</td>
+                    <td className="py-3 pr-4 text-right text-muted-foreground">{formatCurrency(item.producto.precioUnit)}</td>
                     <td className="py-3 pr-4 text-right font-medium text-white">{formatCurrency(item.valorTotal)}</td>
-                    <td className="py-3 pr-4 text-right text-muted-foreground">{item.stockMin}</td>
+                    <td className="py-3 pr-4 text-right text-muted-foreground">{item.producto.stockMin}</td>
                     <td className="py-3 pr-4">
-                      <Badge variant={estadoVariant[item.estado]} className="text-[10px]">
-                        {item.estado === "NORMAL" ? "Normal" : item.estado === "BAJO" ? "Bajo" : "Agotado"}
-                      </Badge>
+                      <Badge variant={estadoMap[item.stockStatus].variant} className="text-[10px]">{estadoMap[item.stockStatus].label}</Badge>
                     </td>
-                    <td className="py-3 pr-4 font-mono text-xs text-muted-foreground">{item.lote}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{item.vencimiento ? formatDate(item.vencimiento) : "N/A"}</td>
+                    <td className="py-3 pr-4 font-mono text-xs text-muted-foreground">{item.lote || "—"}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{item.fechaVencimiento ? formatDate(item.fechaVencimiento) : "N/A"}</td>
                     <td className="py-3 pr-4 text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toast.info("Ver historial kardex")}><Eye className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleAdjust(item)}><Pencil className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300" onClick={() => handleDelete(item)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver producto" onClick={() => setDetailItem(item)}><Eye className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Ajustar stock" onClick={() => openAdjust(item)}><Pencil className="h-3.5 w-3.5" /></Button>
                       </div>
                     </td>
                   </tr>
                 ))}
                 {paginated.length === 0 && (
-                  <tr><td colSpan={15} className="py-12 text-center text-muted-foreground">No se encontraron items en el inventario</td></tr>
+                  <tr><td colSpan={15} className="py-12 text-center text-muted-foreground">No hay existencias registradas. Crea productos y registra entradas.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
           {totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                Mostrando {(page - 1) * perPage + 1}-{Math.min(page * perPage, filtered.length)} de {filtered.length} items
-              </span>
+              <span className="text-xs text-muted-foreground">Mostrando {(page - 1) * perPage + 1}-{Math.min(page * perPage, filtered.length)} de {filtered.length} items</span>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}><ChevronLeft className="h-4 w-4" /></Button>
                 <span className="text-xs text-muted-foreground">{page} / {totalPages}</span>
@@ -317,29 +305,85 @@ export default function InventarioPage() {
         </CardContent>
       </Card>
 
+      {/* Detalle del producto */}
+      <Dialog open={!!detailItem} onOpenChange={(o) => !o && setDetailItem(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white">{detailItem?.producto.nombre}</DialogTitle>
+            <DialogDescription className="font-mono text-xs">{detailItem?.producto.codigo} · {detailItem?.producto.categoria?.nombre}</DialogDescription>
+          </DialogHeader>
+          {detailItem && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <Info label="Bodega" value={detailItem.bodega.nombre} />
+                <Info label="Unidad" value={detailItem.producto.unidadMedida} />
+                <Info label="Existencia" value={`${detailItem.cantidad} ${detailItem.producto.unidadMedida}`} />
+                <Info label="Lote" value={detailItem.lote || "—"} />
+                <Info label="Costo unitario" value={formatCurrency(detailItem.producto.costoUnit)} />
+                <Info label="Precio unitario" value={formatCurrency(detailItem.producto.precioUnit)} />
+                <Info label="Valor en bodega" value={formatCurrency(detailItem.valorTotal)} />
+                <Info label="Stock mín / máx" value={`${detailItem.producto.stockMin} / ${detailItem.producto.stockMax}`} />
+                <Info label="Código de barras" value={detailItem.producto.codigoBarras || "—"} />
+                <Info label="SKU" value={detailItem.producto.sku || "—"} />
+                <Info label="Vencimiento" value={detailItem.fechaVencimiento ? formatDate(detailItem.fechaVencimiento) : "N/A"} />
+                <Info label="Proveedor" value={detailItem.producto.proveedor?.nombre || "—"} />
+              </div>
+              {detailItem.producto.descripcion && (
+                <div className="rounded-lg bg-white/[0.02] p-3 text-xs text-muted-foreground">{detailItem.producto.descripcion}</div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDetailItem(null)}>Cerrar</Button>
+            <a href={`/kardex`} className="inline-flex">
+              <Button variant="outline"><BookOpen className="mr-1 h-4 w-4" />Ver Kardex</Button>
+            </a>
+            <a href={`/productos`} className="inline-flex">
+              <Button><Pencil className="mr-1 h-4 w-4" />Editar Producto</Button>
+            </a>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ajuste de stock */}
       <Dialog open={adjustDialogOpen} onOpenChange={setAdjustDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Ajustar Stock</DialogTitle>
             <DialogDescription>
-              {adjustItem?.producto} - Actual: {adjustItem?.cantidad} {adjustItem?.unidad}
+              {adjustItem?.producto.nombre} — actual: {adjustItem?.cantidad} {adjustItem?.producto.unidadMedida}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label className="text-white">Cantidad a ajustar (+/-)</Label>
+              <Label className="text-white">Cantidad final en bodega</Label>
               <Input type="number" value={adjustCantidad} onChange={(e) => setAdjustCantidad(Number(e.target.value))} className="text-white" />
             </div>
-            <div className="rounded-lg bg-white/[0.02] p-3">
-              <p className="text-xs text-muted-foreground">Resultado: {adjustItem ? adjustItem.cantidad + adjustCantidad : 0} unidades</p>
+            <div className="space-y-2">
+              <Label className="text-white">Motivo</Label>
+              <Input value={adjustMotivo} onChange={(e) => setAdjustMotivo(e.target.value)} placeholder="Merma, conteo físico, corrección..." className="text-white" />
+            </div>
+            <div className="rounded-lg bg-white/[0.02] p-3 text-xs text-muted-foreground">
+              Diferencia: <span className={cn("font-semibold", (adjustCantidad - (adjustItem?.cantidad ?? 0)) === 0 ? "text-white" : "text-amber-400")}>
+                {(adjustCantidad - (adjustItem?.cantidad ?? 0)) > 0 ? "+" : ""}{adjustCantidad - (adjustItem?.cantidad ?? 0)}
+              </span> unidades
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAdjustDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmAdjust}>Confirmar Ajuste</Button>
+            <Button onClick={confirmAdjust} loading={saving}>Confirmar Ajuste</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-white/[0.02] p-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium text-white">{value}</p>
     </div>
   );
 }
