@@ -17,9 +17,10 @@ const PUBLIC_ROUTES = [
   "/contacto",
 ];
 
-const API_PUBLIC_PREFIXES = [
-  "/api/webhooks/recurrente",
-  "/api/auth/login",
+  const API_PUBLIC_PREFIXES = [
+    "/api/webhooks/recurrente",
+    "/api/provision",
+    "/api/auth/login",
   "/api/auth/register",
   "/api/auth/session",
   "/api/auth/logout",
