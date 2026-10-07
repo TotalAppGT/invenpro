@@ -423,6 +423,86 @@ export type DevolucionInput = z.infer<typeof devolucionSchema>;
 export type AjusteInput = z.infer<typeof ajusteSchema>;
 export type ClienteInput = z.infer<typeof clienteSchema>;
 
+// ==========================================================================
+// CICLO COMERCIAL
+// ==========================================================================
+
+export const cotizacionItemSchema = z.object({
+  productoId: z.string().min(1),
+  descripcion: z.string().max(200).optional().nullable(),
+  cantidad: z.number().int().min(1),
+  precioUnit: z.number().min(0),
+  descuento: z.number().min(0).max(100).optional().default(0),
+});
+
+export const cotizacionSchema = z.object({
+  clienteId: z.string().min(1, "El cliente es obligatorio"),
+  validaHasta: z.string().optional().nullable(),
+  notas: z.string().max(500).optional().nullable(),
+  descuentoGlobal: z.number().min(0).optional().default(0),
+  impuestoPct: z.number().min(0).max(100).optional().default(12),
+  items: z.array(cotizacionItemSchema).min(1, "Debe incluir al menos un item"),
+});
+
+export const ventaItemSchema = z.object({
+  productoId: z.string().min(1),
+  cantidad: z.number().int().min(1),
+  precioUnit: z.number().min(0),
+  descuento: z.number().min(0).max(100).optional().default(0),
+});
+
+export const ventaSchema = z.object({
+  tipo: z.enum(["POS", "FACTURA", "CREDITO"]).default("POS"),
+  clienteId: z.string().optional().nullable(),
+  bodegaId: z.string().min(1, "La bodega es obligatoria"),
+  cajaId: z.string().optional().nullable(),
+  descuentoGlobal: z.number().min(0).optional().default(0),
+  impuestoPct: z.number().min(0).max(100).optional().default(12),
+  metodoPago: z.enum(["EFECTIVO", "TARJETA", "TRANSFERENCIA", "CHEQUE", "CREDITO", "OTRO"]).optional().default("EFECTIVO"),
+  pagoInmediato: z.boolean().optional().default(true),
+  montoPagado: z.number().min(0).optional(),
+  notas: z.string().max(500).optional().nullable(),
+  items: z.array(ventaItemSchema).min(1, "Debe incluir al menos un item"),
+});
+
+export const pagoSchema = z.object({
+  monto: z.number().positive("El monto debe ser mayor a 0"),
+  metodo: z.enum(["EFECTIVO", "TARJETA", "TRANSFERENCIA", "CHEQUE", "CREDITO", "OTRO"]).default("EFECTIVO"),
+  referencia: z.string().max(100).optional().nullable(),
+  cajaId: z.string().optional().nullable(),
+});
+
+export const notaSchema = z.object({
+  tipo: z.enum(["CREDITO", "DEBITO"]),
+  motivo: z.string().min(1, "El motivo es obligatorio").max(300),
+  monto: z.number().positive("El monto debe ser mayor a 0"),
+  ventaId: z.string().optional().nullable(),
+  clienteId: z.string().optional().nullable(),
+});
+
+export const cajaAbrirSchema = z.object({
+  nombre: z.string().min(1, "El nombre es obligatorio").max(80),
+  montoInicial: z.number().min(0).optional().default(0),
+});
+
+export const cajaCerrarSchema = z.object({
+  montoFinal: z.number().min(0),
+  notas: z.string().max(300).optional().nullable(),
+});
+
+export const cajaMovimientoSchema = z.object({
+  tipo: z.enum(["INGRESO", "EGRESO", "RETIRO", "VENTA", "DEVOLUCION"]),
+  monto: z.number().positive(),
+  concepto: z.string().min(1).max(200),
+  referencia: z.string().max(100).optional().nullable(),
+});
+
+export type CotizacionInput = z.infer<typeof cotizacionSchema>;
+export type VentaInput = z.infer<typeof ventaSchema>;
+export type PagoInput = z.infer<typeof pagoSchema>;
+export type NotaInput = z.infer<typeof notaSchema>;
+export type CajaMovimientoInput = z.infer<typeof cajaMovimientoSchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type TenantInput = z.infer<typeof tenantSchema>;

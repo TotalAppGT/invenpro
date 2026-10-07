@@ -14,6 +14,7 @@ import {
   BarChart3, Users, Settings, CreditCard, Bell, ShoppingCart,
   ChevronDown, ChevronRight, X, Boxes, TrendingUp,
   MapPin, Hash, Tag, RotateCcw, ClipboardCheck, LineChart,
+  Receipt, Wallet, FileText, StickyNote, Landmark,
 } from "lucide-react";
 
 interface NavGroup {
@@ -97,12 +98,31 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       ],
     },
     {
+      label: "VENTAS",
+      icon: <ShoppingCart className="h-4 w-4" />,
+      items: [
+        { label: "Punto de Venta", href: "/pos", icon: <ShoppingCart className="h-4 w-4" /> },
+        { label: "Ventas", href: "/ventas", icon: <Receipt className="h-4 w-4" /> },
+        { label: "Cotizaciones", href: "/cotizaciones", icon: <FileText className="h-4 w-4" /> },
+        { label: "Notas C/D", href: "/notas", icon: <StickyNote className="h-4 w-4" /> },
+      ],
+    },
+    {
       label: "COMERCIAL",
       icon: <Users className="h-4 w-4" />,
       items: [
         { label: "Clientes", href: "/clientes", icon: <Users className="h-4 w-4" /> },
         { label: "Listas de Precios", href: "/listas-precio", icon: <Tag className="h-4 w-4" /> },
         { label: "Proveedores", href: "/proveedores", icon: <Truck className="h-4 w-4" /> },
+      ],
+    },
+    {
+      label: "FINANZAS",
+      icon: <Wallet className="h-4 w-4" />,
+      items: [
+        { label: "Caja", href: "/caja", icon: <Wallet className="h-4 w-4" /> },
+        { label: "Cuentas por Cobrar", href: "/cuentas-por-cobrar", icon: <Landmark className="h-4 w-4" /> },
+        { label: "Cuentas por Pagar", href: "/cuentas-por-pagar", icon: <Landmark className="h-4 w-4" /> },
       ],
     },
     {
