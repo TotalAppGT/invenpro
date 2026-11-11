@@ -19,6 +19,7 @@ const PUBLIC_ROUTES = [
 
   const API_PUBLIC_PREFIXES = [
     "/api/webhooks/recurrente",
+    "/api/cron",
     "/api/provision",
     "/api/auth/login",
   "/api/auth/register",
