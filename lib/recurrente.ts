@@ -103,7 +103,7 @@ export async function createCheckoutSession({
   });
 
   const data = await response.json();
-  return { id: data.id, url: data.url };
+  return { id: data.id, url: data.checkout_url || data.url };
 }
 
 export async function getSubscriptionStatus(
