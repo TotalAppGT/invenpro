@@ -83,7 +83,7 @@ export async function createCheckoutSession({
     items: [
       {
         name: `${planLabel} - ${intervalLabel}`,
-        amount: amountInCents,
+        amount_in_cents: amountInCents,
         quantity: 1,
       },
     ],
