@@ -1,3 +1,4 @@
+﻿import { createHmac } from "crypto";
 import { prisma } from "./prisma";
 import type { Plan } from "@prisma/client";
 
@@ -92,12 +93,11 @@ export async function createCheckoutSession({
       billingInterval,
       tenantName,
     },
-    customer_email: customerEmail,
     success_url: `${process.env.NEXT_PUBLIC_APP_URL}/suscripcion?checkout=success`,
     cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/suscripcion?checkout=canceled`,
   };
 
-  const response = await recurrenteFetch(recurrente, "/api/checkouts", {
+  const response = await recurrenteFetch(recurrente, "/checkouts", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -117,7 +117,7 @@ export async function getSubscriptionStatus(
   try {
     const response = await recurrenteFetch(
       recurrente,
-      `/api/subscriptions/${subscriptionId}`
+      `/subscriptions/${subscriptionId}`
     );
     const subscription = await response.json();
     return {
@@ -136,68 +136,70 @@ export async function cancelSubscription(
 ): Promise<void> {
   await recurrenteFetch(
     recurrente,
-    `/api/subscriptions/${subscriptionId}/cancel`,
+    `/subscriptions/${subscriptionId}/cancel`,
     { method: "POST" }
   );
 }
 
+function verifySvix(payload: string, id: string, ts: string, sig: string, secret: string): boolean {
+  if (!secret || !id || !ts || !sig) return false;
+  const ahora = Math.floor(Date.now() / 1000);
+  if (Math.abs(ahora - Number(ts)) > 300) return false;
+  const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+  const expected = createHmac("sha256", key).update(`${id}.${ts}.${payload}`).digest("base64");
+  return sig.split(" ").some((part) => {
+    const [v, h] = part.split(",");
+    return v === "v1" && h === expected;
+  });
+}
+
 export async function handleWebhookEvent(
   payload: string,
-  signature: string
+  svixId: string,
+  svixTimestamp: string,
+  svixSignature: string
 ): Promise<boolean> {
-  const webhookSecret = process.env.RECURRENTE_WEBHOOK_SECRET!;
-
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(webhookSecret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
-
-  const isValid = await crypto.subtle.verify(
-    "HMAC",
-    key,
-    Buffer.from(signature, "hex"),
-    encoder.encode(payload)
-  );
-
-  if (!isValid) {
-    console.error("Recurrente webhook signature verification failed");
+  const webhookSecret = process.env.RECURRENTE_WEBHOOK_SECRET || "";
+  if (!verifySvix(payload, svixId, svixTimestamp, svixSignature, webhookSecret)) {
+    console.error("Recurrente webhook: firma invalida");
     return false;
   }
 
-  let event;
+  let event: any;
   try {
     event = JSON.parse(payload);
   } catch {
-    console.error("Failed to parse webhook payload");
     return false;
   }
 
+  const eventType = String(event.event_type || event.type || "");
+  const data = event.data || {};
+  const meta = data.metadata || data.checkout?.metadata || event.metadata || {};
+  const tenantId = meta.tenantId || meta.tenant_id;
+  const plan = meta.plan;
+
+  const estado = String(data.status || data.checkout?.status || "").toLowerCase();
+  const inactivo = /fail|cancel|refund|unpaid|past_due/.test(eventType.toLowerCase()) ||
+    ["failed", "cancelled", "canceled", "unpaid", "past_due"].includes(estado);
+  const activo = /succeed|complete|paid|active|created|updated|renew/i.test(eventType) ||
+    ["paid", "succeeded", "completed", "active"].includes(estado);
+
   try {
-    switch (event.type) {
-      case "checkout.completed": {
-        const tenantId = event.data?.metadata?.tenantId;
-        const plan = event.data?.metadata?.plan;
-        if (!tenantId) break;
-
-        await prisma.tenant.update({
-          where: { id: tenantId },
-          data: {
-            status: "ACTIVO",
-            recurrenteSubscriptionId: event.data?.subscription_id ?? undefined,
-            trialEndsAt: null,
-            plan: plan ?? undefined,
-          },
-        });
-
+    if (tenantId && activo && !inactivo) {
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          status: "ACTIVO",
+          recurrenteSubscriptionId: data.subscription_id || data.subscription?.id || data.id || undefined,
+          trialEndsAt: null,
+          ...(plan ? { plan: plan as any } : {}),
+        },
+      });
+      try {
         const tenant = await prisma.tenant.findUnique({
           where: { id: tenantId },
           include: { users: { where: { rol: "ADMIN" }, take: 1 } },
         });
-
         const adminUser = tenant?.users[0];
         if (adminUser) {
           const { sendSubscriptionEmail } = await import("./resend");
@@ -208,115 +210,16 @@ export async function handleWebhookEvent(
             action: "created",
           }).catch(() => {});
         }
-        break;
-      }
-
-      case "subscription.updated": {
-        const tenantId = event.data?.metadata?.tenantId;
-        if (!tenantId) break;
-
-        const statusMap: Record<string, string> = {
-          active: "ACTIVO",
-          past_due: "SUSPENDIDO",
-          unpaid: "SUSPENDIDO",
-          canceled: "CANCELADO",
-          incomplete: "TRIAL",
-          incomplete_expired: "CANCELADO",
-          trialing: "TRIAL",
-        };
-
-        const newStatus = statusMap[event.data?.status] ?? "ACTIVO";
-        const plan = event.data?.metadata?.plan;
-
-        const updateData: Record<string, unknown> = {
-          recurrenteSubscriptionId: event.data?.id,
-          status: newStatus,
-        };
-        if (plan) updateData.plan = plan;
-
-        if (!event.data?.cancel_at_period_end && event.data?.status === "active") {
-          updateData.trialEndsAt = null;
-        }
-
-        await prisma.tenant.update({
-          where: { id: tenantId },
-          data: updateData,
-        });
-        break;
-      }
-
-      case "subscription.cancelled": {
-        const tenantId = event.data?.metadata?.tenantId;
-        if (!tenantId) break;
-
-        await prisma.tenant.update({
-          where: { id: tenantId },
-          data: {
-            status: "CANCELADO",
-            recurrenteSubscriptionId: null,
-            plan: "EMPRENDEDOR",
-          },
-        });
-
-        const tenant = await prisma.tenant.findUnique({
-          where: { id: tenantId },
-          include: { users: { where: { rol: "ADMIN" }, take: 1 } },
-        });
-
-        const adminUser = tenant?.users[0];
-        if (adminUser) {
-          const { sendSubscriptionEmail } = await import("./resend");
-          await sendSubscriptionEmail({
-            to: adminUser.email,
-            nombre: adminUser.nombre,
-            plan: "EMPRENDEDOR",
-            action: "canceled",
-          }).catch(() => {});
-        }
-        break;
-      }
-
-      case "payment.failed": {
-        const subscriptionId = event.data?.subscription_id;
-        if (subscriptionId) {
-          try {
-            const subscription = await getSubscriptionStatus(subscriptionId);
-            const tenantId = event.data?.metadata?.tenantId;
-
-            if (tenantId) {
-              await prisma.tenant.update({
-                where: { id: tenantId },
-                data: { status: "SUSPENDIDO" },
-              });
-
-              const tenant = await prisma.tenant.findUnique({
-                where: { id: tenantId },
-                include: { users: { where: { rol: "ADMIN" }, take: 1 } },
-              });
-
-              const adminUser = tenant?.users[0];
-              if (adminUser) {
-                const { sendSubscriptionEmail } = await import("./resend");
-                await sendSubscriptionEmail({
-                  to: adminUser.email,
-                  nombre: adminUser.nombre,
-                  plan: (event.data?.metadata?.plan as string) ?? "EMPRENDEDOR",
-                  action: "updated",
-                  details: "El pago ha fallado. Por favor actualiza tu método de pago en Recurrente.",
-                }).catch(() => {});
-              }
-            }
-          } catch (innerErr) {
-            console.error("Failed to handle payment.failed:", innerErr);
-          }
-        }
-        break;
-      }
-
-      default:
-        break;
+      } catch {}
+    } else if (tenantId && inactivo) {
+      const cancelado = /cancel|refund/.test(eventType.toLowerCase());
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: cancelado
+          ? { status: "CANCELADO", recurrenteSubscriptionId: null, plan: "EMPRENDEDOR" }
+          : { status: "SUSPENDIDO" },
+      });
     }
-
     return true;
   } catch (error) {
     console.error("Recurrente webhook handler error:", error);
@@ -338,3 +241,4 @@ export function createCustomerData(tenantId: string) {
     metadata: { tenantId },
   };
 }
+
