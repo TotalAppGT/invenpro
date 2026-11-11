@@ -1,5 +1,6 @@
 ﻿import { createHmac } from "crypto";
 import { prisma } from "./prisma";
+import { extenderVigencia } from "./vencimientos";
 import type { Plan } from "@prisma/client";
 
 const RECURRENTE_BASE_URL = "https://app.recurrente.com/api";
@@ -196,13 +197,13 @@ export async function handleWebhookEvent(
 
   try {
     if (tenantId && activo && !inactivo) {
+      const cicloRaw = String(meta.billingInterval || meta.ciclo || "monthly").toLowerCase();
+      const ciclo = cicloRaw === "yearly" || cicloRaw === "anual" ? "anual" : "mensual";
+      await extenderVigencia(tenantId, ciclo, plan);
       await prisma.tenant.update({
         where: { id: tenantId },
         data: {
-          status: "ACTIVO",
           recurrenteSubscriptionId: data.subscription_id || data.subscription?.id || data.id || undefined,
-          trialEndsAt: null,
-          ...(plan ? { plan: plan as any } : {}),
         },
       });
       try {

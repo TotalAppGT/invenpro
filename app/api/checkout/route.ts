@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       const trialEndsAt = new Date(Date.now() + dias * 24 * 60 * 60 * 1000);
       await prisma.tenant.update({
         where: { id: session.tenantId },
-        data: { status: "ACTIVO", plan: planTrial, trialEndsAt },
+        data: { status: "TRIAL", plan: planTrial, trialEndsAt },
       });
       return NextResponse.json({
         success: true,
