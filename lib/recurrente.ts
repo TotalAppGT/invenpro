@@ -18,7 +18,7 @@ export function createRecurrenteClient(): RecurrenteClient {
 
 export const recurrente = createRecurrenteClient();
 
-const PLAN_AMOUNTS: Record<Plan, { monthly: number; yearly: number }> = {
+export const PLAN_AMOUNTS: Record<Plan, { monthly: number; yearly: number }> = {
   EMPRENDEDOR: { monthly: 14900, yearly: 199000 },
   NEGOCIO: { monthly: 34900, yearly: 349000 },
   CORPORATIVO: { monthly: 79900, yearly: 799000 },
@@ -61,6 +61,8 @@ interface CreateCheckoutSessionParams {
   billingInterval: "monthly" | "yearly";
   customerEmail: string;
   tenantName: string;
+  amountInCents?: number;
+  cupon?: string | null;
 }
 
 export async function createCheckoutSession({
@@ -69,13 +71,20 @@ export async function createCheckoutSession({
   billingInterval,
   customerEmail,
   tenantName,
+  amountInCents: amountOverride,
+  cupon,
 }: CreateCheckoutSessionParams): Promise<{ id: string; url: string }> {
   const amounts = PLAN_AMOUNTS[plan];
   if (!amounts) {
     throw new Error(`No amount configured for plan ${plan}`);
   }
 
-  const amountInCents = billingInterval === "monthly" ? amounts.monthly : amounts.yearly;
+  const amountInCents =
+    typeof amountOverride === "number"
+      ? Math.max(0, amountOverride)
+      : billingInterval === "monthly"
+        ? amounts.monthly
+        : amounts.yearly;
   const planLabel = PLAN_LABELS[plan];
   const intervalLabel = billingInterval === "monthly" ? "Mensual" : "Anual";
 
@@ -92,6 +101,7 @@ export async function createCheckoutSession({
       plan,
       billingInterval,
       tenantName,
+      ...(cupon ? { cupon } : {}),
     },
     success_url: `${process.env.NEXT_PUBLIC_APP_URL}/suscripcion?checkout=success`,
     cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/suscripcion?checkout=canceled`,

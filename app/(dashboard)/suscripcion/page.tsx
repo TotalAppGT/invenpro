@@ -92,6 +92,8 @@ export default function SuscripcionPage() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
   const [plan, setPlan] = useState<Plan>(currentPlan);
+  const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
+  const [cupon, setCupon] = useState("");
 
   const fetchSubscription = useCallback(async () => {
     setLoading(true);
@@ -135,7 +137,7 @@ export default function SuscripcionPage() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: targetPlan, billingInterval }),
+        body: JSON.stringify({ plan: targetPlan, billingInterval: billing, cupon: cupon.trim() || undefined }),
       });
 
       if (!res.ok) {
@@ -144,7 +146,10 @@ export default function SuscripcionPage() {
       }
 
       const { data } = await res.json();
-      if (data?.url) {
+      if (data?.trial_activado) {
+        toast.success(`Trial activado: ${data.dias} dias en el plan ${PLAN_LABELS[data.plan as Plan] || data.plan}`);
+        fetchSubscription();
+      } else if (data?.url) {
         toast.success(`Redirigiendo a Recurrente para completar el pago del plan ${PLAN_LABELS[targetPlan]}...`);
         window.location.href = data.url;
       } else {
@@ -163,7 +168,7 @@ export default function SuscripcionPage() {
       return;
     }
     const nextPlan = plan === "EMPRENDEDOR" ? "NEGOCIO" : "CORPORATIVO";
-    handleChangePlan(nextPlan as Plan);
+    handleChangePlan(nextPlan as Plan, billing);
   };
 
   const handleDowngrade = () => {
@@ -172,7 +177,7 @@ export default function SuscripcionPage() {
       return;
     }
     const prevPlan = plan === "CORPORATIVO" ? "NEGOCIO" : "EMPRENDEDOR";
-    handleChangePlan(prevPlan as Plan);
+    handleChangePlan(prevPlan as Plan, billing);
   };
 
   const handleCancel = async () => {
@@ -214,6 +219,31 @@ export default function SuscripcionPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-white">Suscripción</h1>
         <p className="text-sm text-muted-foreground">Gestiona tu plan y facturación con Recurrente</p>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="inline-flex rounded-lg border border-white/[0.06] bg-[#0a0a2a]/60 p-1">
+          <button
+            type="button"
+            onClick={() => setBilling("monthly")}
+            className={cn("rounded-md px-4 py-1.5 text-sm font-medium", billing === "monthly" ? "bg-indigo-500 text-white" : "text-muted-foreground")}
+          >
+            Mensual
+          </button>
+          <button
+            type="button"
+            onClick={() => setBilling("yearly")}
+            className={cn("rounded-md px-4 py-1.5 text-sm font-medium", billing === "yearly" ? "bg-indigo-500 text-white" : "text-muted-foreground")}
+          >
+            Anual (2 meses gratis)
+          </button>
+        </div>
+        <input
+          value={cupon}
+          onChange={(e) => setCupon(e.target.value.toUpperCase())}
+          placeholder="Codigo de cupon (opcional)"
+          className="w-full max-w-xs rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:border-indigo-500 focus:outline-none"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
